@@ -138,15 +138,11 @@ for (j in 1:nrow(ramsar_global_consolidated)) {
   output_wkt_path <- file.path(country_wkt_dir, paste0(ramsar_site_unique_id, "_", site_name_sanitized, ".wkt"))
 
   # --- Geometry Operations ---
-  original_s2_setting <- sf_use_s2() # Capture original setting
-
   ramsar_site_valid <- tryCatch({
     st_make_valid(ramsar_site)
   }, error = function(e) {
     message(paste("  Error making geometry valid for site", ramsar_site_unique_id, ":", e$message))
     return(NULL)
-  }, finally = {
-    sf_use_s2(original_s2_setting) # Always restore s2 setting
   })
 
   if (is.null(ramsar_site_valid) || st_is_empty(ramsar_site_valid)) {
