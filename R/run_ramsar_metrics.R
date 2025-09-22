@@ -7,6 +7,41 @@ total_occurrences <- calc_ramsar_indicator(
   "total_occ_ts", inputdir, maindir, shapefiledir, continent
 )
 
+saveRDS(total_occurrences, file = paste0(maindir, "/asia_total_occurrences.rds"))
+
+total_occurrences_map <- calc_ramsar_indicator(
+  "total_occ_map", inputdir, maindir, shapefiledir, continent
+)
+
+saveRDS(total_occurrences_map, file = paste0(maindir, "/asia_total_occurrences_map.rds"))
+
+observed_richness <- calc_ramsar_indicator(
+  "total_occ_ts", inputdir, maindir, shapefiledir, continent
+)
+
+saveRDS(observed_richness, file = paste0(maindir, "/asia_observed_richness.rds"))
+
+observed_richness_map <- calc_ramsar_indicator(
+  "obs_richness_map", inputdir, maindir, shapefiledir, continent
+)
+
+saveRDS(observed_richness_map, file = paste0(maindir, "/asia_observed_richness_map.rds"))
+
+cumulative_richness <- calc_ramsar_indicator(
+  "cum_richness_ts", inputdir, maindir, shapefiledir, continent
+)
+
+saveRDS(cumulative_richness, file = paste0(maindir, "/asia_cumulative_richness.rds"))
+
+cumulative_richness_map <- calc_ramsar_indicator(
+  "cum_richness_map", inputdir, maindir, shapefiledir, continent
+)
+
+saveRDS(cumulative_richness_map, file = paste0(maindir, "/asia_cumulative_richness_map.rds"))
+
+
+
+
 occ_per_year <- total_occurrences$values
 mean_occ_per_year <- unlist(total_occurrences$mean)
 
