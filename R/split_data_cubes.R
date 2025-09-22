@@ -35,10 +35,13 @@ message("--- Libraries loaded successfully. ---")
 
 # --- PLEASE CONFIGURE THESE VARIABLES ---
 
+# Set the working directory to where your project files are located.
+setwd("E:/R_projects/b3gbi")
+
 # Path to the large continental biodiversity data cube CSV file.
 # !! IMPORTANT !! Update this to your actual file path.
 # Example: "C:/Users/You/Desktop/data/continental_cube_europe.csv"
-continental_cube_csv_path <- "inst/extdata/continental_gbif_data/antarctica_100m_mgrs_all.csv" # <-- PLEASE UPDATE
+continental_cube_csv_path <- "inst/extdata/continental_gbif_data/northamerica_100m_mgrs_all.csv" # <-- PLEASE UPDATE
 
 # Name of the column in your CSV that contains the 100m MGRS grid ID.
 # !! IMPORTANT !! Update this to match your CSV's column name.
@@ -50,11 +53,11 @@ ramsar_wkt_base_dir <- "inst/extdata/ramsar_sites_wkt" # <-- PLEASE UPDATE
 
 # Path to the directory where the output CSV files for each Ramsar site
 # will be saved. This directory will be created if it doesn't exist.
-output_dir <- "output/ramsar_site_data_100m_antarctica" # <-- PLEASE UPDATE
+output_dir <- "output/ramsar_site_data_100m_northamerica" # <-- PLEASE UPDATE
 
 # Number of rows to read from the large CSV file at a time.
 # Adjust this based on your computer's RAM. Lower if you get memory errors.
-chunk_size <- 2000000
+chunk_size <- 10000000 # 10 million rows per chunk
 
 # --- END OF CONFIGURATION ---
 
@@ -156,10 +159,15 @@ if (!(mgrs_column_name %in% header)) {
 # Initialize variables for the chunking loop
 total_rows_processed <- 0
 chunk_num <- 1
-first_write_flags <- list() # To track if we've written the header for each output file
+# first_write_flags <- list() # To track if we've written the header for each output file
 
 repeat {
+
+  withr::local_options(list(scipen = 999)) # Disable scientific notation so chunk_size can be read by head function
   message(paste("\n- Processing chunk", chunk_num, "(starting after row", total_rows_processed, ")..."))
+
+  start_line <- total_rows_processed + 2
+  cmd_string <- paste0("tail -n +", start_line, " ", shQuote(continental_cube_csv_path, type = "cmd"), " | head -n ", chunk_size)
 
   # Read a chunk of the data using data.table's fread for speed
   data_chunk <- tryCatch({
@@ -171,9 +179,9 @@ repeat {
             encoding = "UTF-8",
             showProgress = FALSE)
     } else {
-      fread(continental_cube_csv_path,
-            skip = total_rows_processed + 1, # +1 because we skip the header row too
-            nrows = chunk_size,
+      # fread(continental_cube_csv_path,
+      #       skip = total_rows_processed + 1, # +1 because we skip the header row too
+      fread(cmd = cmd_string,
             header = FALSE,
             col.names = header,
             encoding = "UTF-8",
@@ -283,24 +291,39 @@ repeat {
       # Using site_name here for descriptive filenames as requested previously.
       output_filename <- file.path(country_output_dir, paste0(site_id, "_data.csv"))
 
-      # Check if this is the first time we are writing to this file
-      # The flag needs to be unique per site_id AND country to prevent overwriting
-      file_flag_key <- paste0(site_id, "_", country_name)
-      is_first_write <- is.null(first_write_flags[[file_flag_key]])
+      # Determine if the file already exists on disk
+      file_exists_on_disk <- file.exists(output_filename)
 
       # Use data.table's fwrite for fast, efficient CSV writing
       fwrite(site_data,
              file = output_filename,
-             append = !is_first_write, # Append if not the first write
-             col.names = is_first_write) # Write header only on the first write
+             append = file_exists_on_disk, # Append if the file already exists
+             col.names = !file_exists_on_disk) # Write header ONLY if the file does NOT exist
 
-      # Mark that we have now written to this file at least once
-      if(is_first_write) {
-        first_write_flags[[file_flag_key]] <- TRUE
+      if(!file_exists_on_disk) {
         message(paste("     -> Creating new file and writing", nrow(site_data), "records to:", basename(output_filename)))
       } else {
         message(paste("     -> Appending", nrow(site_data), "records to:", basename(output_filename)))
       }
+
+      # Check if this is the first time we are writing to this file
+      # The flag needs to be unique per site_id AND country to prevent overwriting
+      # file_flag_key <- paste0(site_id, "_", country_name)
+      # is_first_write <- is.null(first_write_flags[[file_flag_key]])
+
+      # # Use data.table's fwrite for fast, efficient CSV writing
+      # fwrite(site_data,
+      #        file = output_filename,
+      #        append = !is_first_write, # Append if not the first write
+      #        col.names = is_first_write) # Write header only on the first write
+
+      # # Mark that we have now written to this file at least once
+      # if(is_first_write) {
+      #   first_write_flags[[file_flag_key]] <- TRUE
+      #   message(paste("     -> Creating new file and writing", nrow(site_data), "records to:", basename(output_filename)))
+      # } else {
+      #   message(paste("     -> Appending", nrow(site_data), "records to:", basename(output_filename)))
+      # }
     }
   }
 
