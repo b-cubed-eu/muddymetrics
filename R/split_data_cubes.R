@@ -23,21 +23,25 @@
 # --- 0. SETUP: LOAD LIBRARIES AND CONFIGURE PATHS ---
 
 # Ensure required packages are installed, or install them
-# install.packages(c("sf", "data.table", "dplyr", "mgrs"))
-
-library(sf)
-library(data.table)
-library(dplyr)
-library(mgrs)
+  packages <- c("sf", "data.table", "dplyr", "stringi", "mgrs") # Add all packages your script uses
+  for (p in packages) {
+    if (!requireNamespace(p, quietly = TRUE)) {
+      install.packages(p)
+    }
+    library(p, character.only = TRUE)
+  }
 
 message("--- Libraries loaded successfully. ---")
 
 # --- PLEASE CONFIGURE THESE VARIABLES ---
 
+# Set the working directory to where your project files are located.
+setwd("E:/R_projects/b3gbi")
+
 # Path to the large continental biodiversity data cube CSV file.
 # !! IMPORTANT !! Update this to your actual file path.
 # Example: "C:/Users/You/Desktop/data/continental_cube_europe.csv"
-continental_cube_csv_path <- "inst/extdata/continental_gbif_data/asia_100m_mgrs_all.csv" # <-- PLEASE UPDATE
+continental_cube_csv_path <- "inst/extdata/continental_gbif_data/northamerica_100m_mgrs_all.csv" # <-- PLEASE UPDATE
 
 # Name of the column in your CSV that contains the 100m MGRS grid ID.
 # !! IMPORTANT !! Update this to match your CSV's column name.
@@ -49,11 +53,11 @@ ramsar_wkt_base_dir <- "inst/extdata/ramsar_sites_wkt" # <-- PLEASE UPDATE
 
 # Path to the directory where the output CSV files for each Ramsar site
 # will be saved. This directory will be created if it doesn't exist.
-output_dir <- "output/ramsar_site_data_100m" # <-- PLEASE UPDATE
+output_dir <- "output/ramsar_site_data_100m_northamerica" # <-- PLEASE UPDATE
 
 # Number of rows to read from the large CSV file at a time.
 # Adjust this based on your computer's RAM. Lower if you get memory errors.
-chunk_size <- 2000000
+chunk_size <- 10000000 # 10 million rows per chunk
 
 # --- END OF CONFIGURATION ---
 
@@ -70,6 +74,8 @@ message("\n--- Step 1: Loading and preparing Ramsar site polygons... ---")
 
 # Recursively find all .wkt files in the specified directory
 wkt_files <- list.files(ramsar_wkt_base_dir, pattern = "\\.wkt$", recursive = TRUE, full.names = TRUE)
+
+message(paste("--- Found", length(wkt_files), ".wkt files in:", ramsar_wkt_base_dir, "---"))
 
 if (length(wkt_files) == 0) {
   stop("FATAL ERROR: No .wkt files found in the specified directory: ", ramsar_wkt_base_dir,
@@ -89,12 +95,14 @@ ramsar_sf_list <- lapply(wkt_files, function(file_path) {
     filename <- basename(file_path)
     ramsar_site_id <- tools::file_path_sans_ext(filename)
     site_name_for_display <- ramsar_site_id
+    country_name <- basename(dirname(file_path))
 
 
     # Create a one-row sf data frame for this site
     site_sf <- st_as_sf(data.frame(
       ramsar_site_id = ramsar_site_id,
       site_name = site_name_for_display,
+      country_en = country_name,
       source_wkt_file = filename
     ), geom = geom)
 
@@ -115,10 +123,18 @@ if (is.null(ramsar_sites_sf) || nrow(ramsar_sites_sf) == 0) {
 
 message(paste("--- Successfully loaded", nrow(ramsar_sites_sf), "Ramsar site polygons into a single spatial layer. ---"))
 
+message("\n--- Unique Ramsar Site IDs loaded from WKT files: ---")
+print(unique(ramsar_sites_sf$ramsar_site_id))
+message("\n--- Unique Countries loaded from WKT file paths: ---")
+print(unique(ramsar_sites_sf$country_en))
+
+message("\n--- Details of first 5 loaded Ramsar sites (if available): ---")
+print(head(ramsar_sites_sf[, c("ramsar_site_id", "site_name", "country_en", "source_wkt_file")], 5))
+
 # --- Clean and validate the combined Ramsar geometries ---
 # The s2 geometry engine is strict and can error on minor issues like duplicate
 # vertices ('degenerate edges'). st_make_valid() cleans these issues to prevent
-# errors during the spatial join. This is the fix for the user's reported error.
+# errors during the spatial join.
 message("\n--- Validating and cleaning Ramsar site geometries to prevent join errors... ---")
 ramsar_sites_sf <- st_make_valid(ramsar_sites_sf)
 message("--- Geometries validated. ---")
@@ -143,10 +159,15 @@ if (!(mgrs_column_name %in% header)) {
 # Initialize variables for the chunking loop
 total_rows_processed <- 0
 chunk_num <- 1
-first_write_flags <- list() # To track if we've written the header for each output file
+# first_write_flags <- list() # To track if we've written the header for each output file
 
 repeat {
+
+  withr::local_options(list(scipen = 999)) # Disable scientific notation so chunk_size can be read by head function
   message(paste("\n- Processing chunk", chunk_num, "(starting after row", total_rows_processed, ")..."))
+
+  start_line <- total_rows_processed + 2
+  cmd_string <- paste0("tail -n +", start_line, " ", shQuote(continental_cube_csv_path, type = "cmd"), " | head -n ", chunk_size)
 
   # Read a chunk of the data using data.table's fread for speed
   data_chunk <- tryCatch({
@@ -158,9 +179,9 @@ repeat {
             encoding = "UTF-8",
             showProgress = FALSE)
     } else {
-      fread(continental_cube_csv_path,
-            skip = total_rows_processed + 1, # +1 because we skip the header row too
-            nrows = chunk_size,
+      # fread(continental_cube_csv_path,
+      #       skip = total_rows_processed + 1, # +1 because we skip the header row too
+      fread(cmd = cmd_string,
             header = FALSE,
             col.names = header,
             encoding = "UTF-8",
@@ -221,9 +242,9 @@ repeat {
   sf_use_s2(TRUE)
 
   if (nrow(points_in_ramsar) == 0) {
-    message("  No records from this chunk were found inside any Ramsar site.")
+    message("   No records from this chunk were found inside any Ramsar site.")
   } else {
-    message(paste("  SUCCESS: Found", nrow(points_in_ramsar), "records within Ramsar sites in this chunk."))
+    message(paste("   SUCCESS: Found", nrow(points_in_ramsar), "records within Ramsar sites in this chunk."))
 
     # Merge the original data from the chunk back to the spatial results
     # The join is based on the MGRS column, which is named 'mgrs' in `points_in_ramsar`
@@ -238,35 +259,71 @@ repeat {
     )
 
     # --- 2d. Write/Append Results to Site-Specific Files ---
-    # The `ramsar_site_id` column now indicates which site each point belongs to.
-    # We split the data table by this ID and write each part to its respective file.
-    split_by_site <- split(results_to_write_dt, by = "ramsar_site_id")
+    # The `ramsar_site_id` and `country_en` columns now indicate which site each point belongs to.
+    # We split the data table by this combination to ensure unique files per site per country.
+    # This is the crucial change to ensure correct country-specific splitting.
+    split_by_site_country <- split(results_to_write_dt, by = c("ramsar_site_id", "country_en"))
 
-    for(site_id in names(split_by_site)) {
-      site_data <- split_by_site[[site_id]]
+    message(paste("   Attempting to write to", length(names(split_by_site_country)), "distinct output files for this chunk."))
 
-      # Get the sanitized site name for a more descriptive filename
-      site_info <- ramsar_sites_sf[ramsar_sites_sf$ramsar_site_id == site_id, ]
-      site_name <- site_info$site_name[1]
+    for(site_country_key in names(split_by_site_country)) {
+      site_data <- split_by_site_country[[site_country_key]]
 
-      output_filename <- file.path(output_dir, paste0(site_id, "_data.csv"))
+      # Parse the key to get site_id and country_name
+      # The key generated by data.table::split with by=c("col1", "col2") is "col1.col2"
+      key_parts <- strsplit(site_country_key, "\\.")[[1]]
+      site_id <- key_parts[1]
+      country_name <- key_parts[2] # Correctly extract country name from the split key
 
-      # Check if this is the first time we are writing to this file
-      is_first_write <- is.null(first_write_flags[[site_id]])
+      # Get the sanitized site name for a more descriptive filename (from ramsar_sites_sf)
+      # Filter ramsar_sites_sf by both site_id and country_name to ensure precise lookup
+      site_info <- ramsar_sites_sf[ramsar_sites_sf$ramsar_site_id == site_id & ramsar_sites_sf$country_en == country_name, ]
+      site_name <- site_info$site_name[1] # Take the first if multiple exist (shouldn't if IDs are truly unique per country)
+
+      # Create country-specific subdirectory
+      country_output_dir <- file.path(output_dir, country_name)
+      if (!dir.exists(country_output_dir)) {
+        dir.create(country_output_dir, recursive = TRUE)
+        message(paste("    Created country output directory:", country_output_dir))
+      }
+
+      # Define the output filename within the country directory
+      # Using site_name here for descriptive filenames as requested previously.
+      output_filename <- file.path(country_output_dir, paste0(site_id, "_data.csv"))
+
+      # Determine if the file already exists on disk
+      file_exists_on_disk <- file.exists(output_filename)
 
       # Use data.table's fwrite for fast, efficient CSV writing
       fwrite(site_data,
              file = output_filename,
-             append = !is_first_write, # Append if not the first write
-             col.names = is_first_write) # Write header only on the first write
+             append = file_exists_on_disk, # Append if the file already exists
+             col.names = !file_exists_on_disk) # Write header ONLY if the file does NOT exist
 
-      # Mark that we have now written to this file at least once
-      if(is_first_write) {
-        first_write_flags[[site_id]] <- TRUE
-        message(paste("    -> Creating new file and writing", nrow(site_data), "records to:", basename(output_filename)))
+      if(!file_exists_on_disk) {
+        message(paste("     -> Creating new file and writing", nrow(site_data), "records to:", basename(output_filename)))
       } else {
-        message(paste("    -> Appending", nrow(site_data), "records to:", basename(output_filename)))
+        message(paste("     -> Appending", nrow(site_data), "records to:", basename(output_filename)))
       }
+
+      # Check if this is the first time we are writing to this file
+      # The flag needs to be unique per site_id AND country to prevent overwriting
+      # file_flag_key <- paste0(site_id, "_", country_name)
+      # is_first_write <- is.null(first_write_flags[[file_flag_key]])
+
+      # # Use data.table's fwrite for fast, efficient CSV writing
+      # fwrite(site_data,
+      #        file = output_filename,
+      #        append = !is_first_write, # Append if not the first write
+      #        col.names = is_first_write) # Write header only on the first write
+
+      # # Mark that we have now written to this file at least once
+      # if(is_first_write) {
+      #   first_write_flags[[file_flag_key]] <- TRUE
+      #   message(paste("     -> Creating new file and writing", nrow(site_data), "records to:", basename(output_filename)))
+      # } else {
+      #   message(paste("     -> Appending", nrow(site_data), "records to:", basename(output_filename)))
+      # }
     }
   }
 
