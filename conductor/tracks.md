@@ -15,3 +15,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ## [ ] Track: Indicator Robustness and Validation
 *Link: [./conductor/tracks/indicator_robustness_20260130/](./conductor/tracks/indicator_robustness_20260130/)*
+
+## [ ] Track: Automated Report Generation (Dashboard)
+*Link: [./conductor/tracks/automated_reporting_20260130/](./conductor/tracks/automated_reporting_20260130/)*

@@ -1,19 +1,20 @@
 # Track Plan: Global Data Sufficiency Assessment
 
 ## Phase 1: Pipeline Setup and Data Prep
-- [ ] Task: Create `R/global_analysis_workflow.R` to orchestrate the global run.
-- [ ] Task: Implement function to load and validate the master list of Ramsar sites and WKT boundaries.
+- [x] Task: Preprocess global Ramsar shapefile and generate WKT boundaries.
+- [x] Task: Organize site-level data directories.
 - [ ] Task: Conductor - User Manual Verification 'Pipeline Setup' (Protocol in workflow.md)
 
-## Phase 2: Indicator Implementation
-- [ ] Task: Implement `calculate_observed_richness()` using `b3gbi`.
-- [ ] Task: Implement `calculate_occurrence_density()` using `b3gbi` and site area.
-- [ ] Task: Implement `calculate_temporal_metrics()` (Mean Year, Cumulative Richness).
-- [ ] Task: Create unit tests for each indicator function with sample data.
+## Phase 2: Indicator Implementation & Validation
+- [x] Task: Calculate Observed Richness for global sites.
+- [x] Task: Calculate Total Occurrences for global sites.
+- [x] Task: Calculate Cumulative Richness for global sites.
+- [ ] Task: Validate existing `overall_density.RData` files and ensure consistency.
+- [ ] Task: Implement "Mean Year of Occurrence" across all sites to assess data recency.
 - [ ] Task: Conductor - User Manual Verification 'Indicator Implementation' (Protocol in workflow.md)
 
 ## Phase 3: Global Execution and Aggregation
-- [ ] Task: Update `calc_ramsar_indicator` to integrate new modular functions.
-- [ ] Task: Implement parallel processing logic (e.g., using `future` or `parallel` package) to iterate over all sites.
-- [ ] Task: Create a script to aggregate individual site results into a global summary CSV `output/global_sufficiency_summary.csv`.
+- [ ] Task: Create a script `R/aggregate_global_results.R` to consolidate all site-level `.RData` files into a single master dataset.
+- [ ] Task: Generate a global summary CSV `output/global_sufficiency_summary.csv` with key metrics for all ~2,500 sites.
+- [ ] Task: Perform "Data Gap Analysis" (identify sites/regions with zero or low data sufficiency).
 - [ ] Task: Conductor - User Manual Verification 'Global Execution' (Protocol in workflow.md)
