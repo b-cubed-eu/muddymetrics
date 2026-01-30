@@ -7,12 +7,15 @@ Implement a robust pipeline to calculate "Phase 1" data sufficiency indicators f
 1.  **Observed Richness:** Total number of unique species recorded.
 2.  **Total Occurrences:** Raw count of occurrence records.
 3.  **Cumulative Richness:** Species accumulation over time.
-4.  **Density of Occurrences:** Occurrences per unit area (km²).
+4.  **Density of Occurrences:** Occurrences per unit area (km²). Target threshold: **≥ 0.25 records/km²** (Troia & McManamay 2016).
 5.  **Mean Year of Occurrence:** Average year of observation (proxy for data recency).
+6.  **Inventory Completeness (Chao2):** Ratio of observed to estimated richness. Target threshold: **≥ 0.7**.
+7.  **Survey Saturation (SAC Slope):** Slope of the Species Accumulation Curve. Target threshold: **≤ 0.10**.
 
 ## Requirements
 - **Input:** Global GBIF occurrence cubes (CSV/Parquet) and Ramsar site boundaries (WKT).
-- **Processing:** Iterate through all global sites, calculating the 5 core indicators using `b3gbi`.
+- **Processing:** Iterate through all global sites, calculating the core indicators and the Troia 2016 "Moderate Threshold" suite.
+- **Filtering:** Sites must be classified as "Data-Rich" (pass thresholds) or "Data-Poor" (quantify the monitoring gap).
 - **Output:**
     - Standardized `.rds` files for each site/indicator.
     - Aggregated summary table (CSV) for global analysis.
