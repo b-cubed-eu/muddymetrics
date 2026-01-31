@@ -1,12 +1,12 @@
 # Track Plan: Refactor Codebase for Usability and Modularity
 
-## Phase 1: Analysis and Strategy
+## Phase 1: Analysis and Strategy [checkpoint: 2dc32a0]
 - [x] Task: Analyze existing R scripts in `R/` to identify redundant logic and dependency chains. d774044
-- [~] Task: Define the new file structure and module boundaries (e.g., `download.R`, `process.R`, `visualize.R`).
-- [ ] Task: Conductor - User Manual Verification 'Analysis and Strategy' (Protocol in workflow.md)
+- [x] Task: Define the new file structure and module boundaries (e.g., `download.R`, `process.R`, `visualize.R`). e972f65
+- [x] Task: Conductor - User Manual Verification 'Analysis and Strategy' (Protocol in workflow.md)
 
 ## Phase 2: Modularization
-- [ ] Task: Refactor data downloading logic into reusable functions in `R/download_functions.R`.
+- [~] Task: Refactor data downloading logic into reusable functions in `R/download_functions.R`.
 - [ ] Task: Refactor indicator calculation logic (using `b3gbi`) into `R/indicator_functions.R`.
 - [ ] Task: Refactor visualization logic into `R/visualization_functions.R`.
 - [ ] Task: Apply Tidyverse style guide to all new files.
