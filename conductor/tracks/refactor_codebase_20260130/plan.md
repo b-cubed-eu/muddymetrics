@@ -12,12 +12,12 @@
 - [x] Task: Apply Tidyverse style guide to all new files. 61bed67
 - [x] Task: Conductor - User Manual Verification 'Modularization' (Protocol in workflow.md)
 
-## Phase 3: Documentation and Testing
+## Phase 3: Documentation and Testing [checkpoint: 007e36a]
 - [x] Task: Add `roxygen2` documentation to all exported functions. 6679e76
-- [~] Task: Create unit tests for key indicator functions using `testthat`.
-- [ ] Task: Conductor - User Manual Verification 'Documentation and Testing' (Protocol in workflow.md)
+- [x] Task: Create unit tests for key indicator functions using `testthat`. 1523214
+- [x] Task: Conductor - User Manual Verification 'Documentation and Testing' (Protocol in workflow.md)
 
 ## Phase 4: Workflow Unification
-- [ ] Task: Create a master workflow script (e.g., `main.R` or `run_analysis.R`) that orchestrates the entire pipeline.
+- [~] Task: Create a master workflow script (e.g., `main.R` or `run_analysis.R`) that orchestrates the entire pipeline.
 - [ ] Task: Update `README.md` to reflect the new structure and usage instructions.
 - [ ] Task: Conductor - User Manual Verification 'Workflow Unification' (Protocol in workflow.md)
