@@ -1,0 +1,58 @@
+---
+title: "Introduction to muddymetrics"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to muddymetrics}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(muddymetrics)
+```
+
+## Overview
+
+`muddymetrics` is an R package designed to evaluate Ramsar policy monitoring using open GBIF data. It provides a standardized pipeline for downloading continental-scale GBIF data cubes and calculating biodiversity indicators for thousands of Ramsar sites.
+
+## Core Workflows
+
+### 1. Data Ingestion (Continental)
+
+The most efficient way to process thousands of sites is the Continental workflow:
+
+1.  **Download:** Use `scripts/download_continental_cubes.R` to request a massive 100m MGRS cube for an entire continent.
+2.  **Cut:** Use `scripts/split_data_cubes.R` to intersect that cube with Ramsar polygons locally.
+
+### 2. Indicator Calculation
+
+Once the data is cut into site-level CSVs, use `calc_ramsar_indicator()` for batch processing:
+
+```r
+# Example for Asia
+input_base <- "inst/extdata/ramsar_site_data_100m_asia"
+output_base <- "output/ramsar_metric_results_100m/asia"
+wkt_base <- "inst/extdata/ramsar_sites_wkt"
+
+results <- calc_ramsar_indicator(
+  indicator = "obs_richness_ts",
+  inputdir = input_base,
+  maindir = output_base,
+  shapefiledir = wkt_base,
+  continent = "Asia"
+)
+```
+
+## Key Functions
+
+- `get_gbif_predicates()`: Constructs robust GBIF API queries.
+- `calculate_ramsar_metric()`: Wrapper for `b3gbi` indicator calculations.
+- `save_ramsar_plot()`: Standardized plotting using viridis scales.
+- `check_gbif_credentials()`: Pre-flight check for GBIF API access.

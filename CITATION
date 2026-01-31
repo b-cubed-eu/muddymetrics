@@ -1,0 +1,6 @@
+bibentry("Manual",
+         title = "muddymetrics: Ramsar Biodiversity Indicator Pipeline",
+         author = person("Shawn", "Dove"),
+         year = "2026",
+         note = "R package version 0.1.0",
+         url = "https://github.com/b-cubed-eu/muddymetrics")

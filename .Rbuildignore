@@ -1,0 +1,15 @@
+^muddymetrics\.Rproj$
+^\.Rproj\.user$
+^conductor$
+^scripts$
+^main\.R$
+^README\.html$
+^\.github$
+^output$
+.*\.zip$
+.*\.png$
+^\.Rhistory$
+^CITATION\.cff$
+^codemeta\.json$
+^_pkgdown\.yaml$
+^CODE_OF_CONDUCT\.md$
