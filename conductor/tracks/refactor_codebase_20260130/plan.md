@@ -7,9 +7,9 @@
 
 ## Phase 2: Modularization
 - [x] Task: Refactor data downloading logic into reusable functions in `R/download_functions.R`. 92d544c
-- [ ] Task: Refactor indicator calculation logic (using `b3gbi`) into `R/indicator_functions.R`.
-- [ ] Task: Refactor visualization logic into `R/visualization_functions.R`.
-- [ ] Task: Apply Tidyverse style guide to all new files.
+- [x] Task: Refactor indicator calculation logic (using `b3gbi`) into `R/indicator_functions.R`. 61bed67
+- [x] Task: Refactor visualization logic into `R/visualization_functions.R`. 61bed67
+- [x] Task: Apply Tidyverse style guide to all new files. 61bed67
 - [ ] Task: Conductor - User Manual Verification 'Modularization' (Protocol in workflow.md)
 
 ## Phase 3: Documentation and Testing
