@@ -36,7 +36,7 @@ message("--- Libraries loaded successfully. ---")
 # --- PLEASE CONFIGURE THESE VARIABLES ---
 
 # Set the working directory to where your project files are located.
-setwd("E:/R_projects/b3gbi")
+# setwd("E:/R_projects/b3gbi")
 
 # Path to the large continental biodiversity data cube CSV file.
 # !! IMPORTANT !! Update this to your actual file path.

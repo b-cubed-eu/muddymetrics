@@ -18,6 +18,6 @@
 - [x] Task: Conductor - User Manual Verification 'Documentation and Testing' (Protocol in workflow.md)
 
 ## Phase 4: Workflow Unification
-- [~] Task: Create a master workflow script (e.g., `main.R` or `run_analysis.R`) that orchestrates the entire pipeline.
-- [ ] Task: Update `README.md` to reflect the new structure and usage instructions.
+- [x] Task: Create a master workflow script (e.g., `main.R` or `run_analysis.R`) that orchestrates the entire pipeline. ff6819a
+- [x] Task: Update `README.md` to reflect the new structure and usage instructions. ff6819a
 - [ ] Task: Conductor - User Manual Verification 'Workflow Unification' (Protocol in workflow.md)
