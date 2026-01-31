@@ -1,0 +1,24 @@
+Package: muddymetrics
+Title: Ramsar Biodiversity Indicator Pipeline
+Version: 0.1.0
+Authors@R: person("Shawn", "Dove", email = "shawn.dove@allzool.bio.uni-giessen.de", role = c("aut", "cre"))
+Description: Automated pipeline for calculating biodiversity indicators for Ramsar sites using GBIF data cubes and b3gbi.
+License: MIT
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.3
+Imports: 
+    b3gbi,
+    sf,
+    dplyr,
+    ggplot2,
+    rgbif,
+    utils,
+    tools
+Suggests: 
+    testthat (>= 3.0.0),
+    covr,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+Config/testthat/edition: 3
