@@ -3,6 +3,8 @@
 #' @param wkt A WKT string defining the geometry.
 #' @param filters A list of filters to apply (e.g., hasGeospatialIssue, basisOfRecord).
 #' @return A GBIF predicate object.
+#'
+#' @importFrom rgbif pred pred_in pred_and
 #' @export
 get_gbif_predicates <- function(wkt, filters) {
   # Start with the geometry predicate

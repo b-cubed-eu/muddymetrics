@@ -8,6 +8,9 @@
 #' @param units Units for width and height (default: "px").
 #' @param ... Additional arguments passed to b3gbi::plot.
 #' @return The ggplot object (invisibly).
+#'
+#' @importFrom b3gbi plot_ts plot_map
+#' @importFrom ggplot2 ggsave
 #' @export
 save_ramsar_plot <- function(indicator_obj,
                             filename,

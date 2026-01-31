@@ -1,3 +1,24 @@
+#' Batch Calculate and Save Ramsar Biodiversity Indicators
+#'
+#' @description
+#' This function iterates through Ramsar sites in country subdirectories,
+#' processes their GBIF data cubes, calculates a specific biodiversity
+#' indicator using \code{b3gbi}, and saves the resulting plots.
+#'
+#' @param indicator Character. The indicator to calculate, combined with type
+#'   (e.g., "obs_richness_ts", "total_occ_map").
+#' @param inputdir Character. Path to the base directory containing country-level
+#'   subdirectories with GBIF data cubes.
+#' @param maindir Character. Path to the base output directory.
+#' @param shapefiledir Character. Path to the base directory containing site WKT files.
+#' @param continent Character. The continent name used for b3gbi internal mapping.
+#'
+#' @return A list containing two nested lists: \code{mean} (mean indicator values
+#'   per site) and \code{values} (raw indicator values per site).
+#'
+#' @importFrom b3gbi process_cube compute_indicator_workflow
+#' @importFrom ggplot2 ggsave
+#' @export
 calc_ramsar_indicator <- function(indicator,
                                   inputdir,
                                   maindir,
@@ -38,11 +59,11 @@ calc_ramsar_indicator <- function(indicator,
           shapefiledir, "/", countrylist[i], "/", sitename, ".wkt"
         )
 
-        cube <- process_cube(paste0(
+        cube <- b3gbi::process_cube(paste0(
           inputdir, "/", countrylist[i], "/", sitelist[j]), separator = ","
         )
 
-        ind_temp <- compute_indicator_workflow(
+        ind_temp <- b3gbi::compute_indicator_workflow(
           data = cube,
           type = indy,
           dim_type = type,

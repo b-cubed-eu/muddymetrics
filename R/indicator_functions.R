@@ -7,6 +7,8 @@
 #' @param region The continent or region for the analysis.
 #' @param ... Additional arguments passed to b3gbi::compute_indicator_workflow.
 #' @return A b3gbi_indicator object.
+#'
+#' @importFrom b3gbi process_cube compute_indicator_workflow
 #' @export
 calculate_ramsar_metric <- function(cube,
                                    metric,
