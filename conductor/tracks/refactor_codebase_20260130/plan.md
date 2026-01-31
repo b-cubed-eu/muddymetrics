@@ -5,15 +5,15 @@
 - [x] Task: Define the new file structure and module boundaries (e.g., `download.R`, `process.R`, `visualize.R`). e972f65
 - [x] Task: Conductor - User Manual Verification 'Analysis and Strategy' (Protocol in workflow.md)
 
-## Phase 2: Modularization
+## Phase 2: Modularization [checkpoint: 0f274ab]
 - [x] Task: Refactor data downloading logic into reusable functions in `R/download_functions.R`. 92d544c
 - [x] Task: Refactor indicator calculation logic (using `b3gbi`) into `R/indicator_functions.R`. 61bed67
 - [x] Task: Refactor visualization logic into `R/visualization_functions.R`. 61bed67
 - [x] Task: Apply Tidyverse style guide to all new files. 61bed67
-- [ ] Task: Conductor - User Manual Verification 'Modularization' (Protocol in workflow.md)
+- [x] Task: Conductor - User Manual Verification 'Modularization' (Protocol in workflow.md)
 
 ## Phase 3: Documentation and Testing
-- [ ] Task: Add `roxygen2` documentation to all exported functions.
+- [~] Task: Add `roxygen2` documentation to all exported functions.
 - [ ] Task: Create unit tests for key indicator functions using `testthat`.
 - [ ] Task: Conductor - User Manual Verification 'Documentation and Testing' (Protocol in workflow.md)
 
