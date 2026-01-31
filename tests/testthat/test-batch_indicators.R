@@ -1,6 +1,7 @@
 library(testthat)
+library(b3gbi)
 
-test_that("calc_ramsar_indicator works with Vietnam test data", {
+test_that("calc_ramsar_indicator handles empty input gracefully", {
   # We'll use the existing Vietnam data for a small integration test
   # This avoids complex mocking of b3gbi internal behavior
   
@@ -19,11 +20,15 @@ test_that("calc_ramsar_indicator works with Vietnam test data", {
   print(paste("Current WD:", getwd()))
   
   # Copy Vietnam data
-  src_csv <- "../../inst/extdata/ramsar_site_data_100m_asia/Vietnam/site_2227_Lang_Sen_Wetland_Reserve_data.csv"
+  src_csv <- system.file("extdata/ramsar_site_data_100m_asia/Vietnam/site_2227_Lang_Sen_Wetland_Reserve_data.csv", package = "muddymetrics")
+  if (src_csv == "") src_csv <- "../../inst/extdata/ramsar_site_data_100m_asia/Vietnam/site_2227_Lang_Sen_Wetland_Reserve_data.csv"
+  
   dest_csv <- file.path(tmp_input, "Vietnam", "site_2227_Lang_Sen_Wetland_Reserve_data.csv")
   res_csv <- file.copy(src_csv, dest_csv)
   
-  src_wkt <- "../../inst/extdata/ramsar_sites_wkt/Vietnam/site_2227_Lang_Sen_Wetland_Reserve.wkt"
+  src_wkt <- system.file("extdata/ramsar_sites_wkt/Vietnam/site_2227_Lang_Sen_Wetland_Reserve.wkt", package = "muddymetrics")
+  if (src_wkt == "") src_wkt <- "../../inst/extdata/ramsar_sites_wkt/Vietnam/site_2227_Lang_Sen_Wetland_Reserve.wkt"
+  
   dest_wkt <- file.path(tmp_wkt, "Vietnam", "site_2227_Lang_Sen_Wetland_Reserve.wkt")
   res_wkt <- file.copy(src_wkt, dest_wkt)
   
