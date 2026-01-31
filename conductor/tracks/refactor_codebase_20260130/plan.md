@@ -13,8 +13,8 @@
 - [x] Task: Conductor - User Manual Verification 'Modularization' (Protocol in workflow.md)
 
 ## Phase 3: Documentation and Testing
-- [~] Task: Add `roxygen2` documentation to all exported functions.
-- [ ] Task: Create unit tests for key indicator functions using `testthat`.
+- [x] Task: Add `roxygen2` documentation to all exported functions. 6679e76
+- [~] Task: Create unit tests for key indicator functions using `testthat`.
 - [ ] Task: Conductor - User Manual Verification 'Documentation and Testing' (Protocol in workflow.md)
 
 ## Phase 4: Workflow Unification
