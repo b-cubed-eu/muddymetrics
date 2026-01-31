@@ -6,7 +6,7 @@
 - [x] Task: Conductor - User Manual Verification 'Analysis and Strategy' (Protocol in workflow.md)
 
 ## Phase 2: Modularization
-- [~] Task: Refactor data downloading logic into reusable functions in `R/download_functions.R`.
+- [x] Task: Refactor data downloading logic into reusable functions in `R/download_functions.R`. 92d544c
 - [ ] Task: Refactor indicator calculation logic (using `b3gbi`) into `R/indicator_functions.R`.
 - [ ] Task: Refactor visualization logic into `R/visualization_functions.R`.
 - [ ] Task: Apply Tidyverse style guide to all new files.
