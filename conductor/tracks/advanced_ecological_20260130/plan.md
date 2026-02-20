@@ -1,9 +1,12 @@
 # Track Plan: Advanced Ecological Analysis
 
 ## Phase 1: Diversity and Rarity Metrics
-- [ ] Task: Implement `calculate_alpha_diversity()` (Hill numbers, Shannon, Simpson) in `R/ecological_functions.R`.
-- [ ] Task: Implement `calculate_evenness()` (Pielou, Williams).
-- [ ] Task: Implement `calculate_rarity_metrics()` (Area/Abundance based).
+- [x] Task: Implement `calculate_alpha_diversity()` (Hill numbers, Shannon, Simpson) in `R/ecological_functions.R`.
+  - Created: `R/ecological_functions.R` with Hill 0/1/2, Shannon, Simpson metrics.
+- [x] Task: Implement `calculate_evenness()` (Pielou, Williams).
+  - Added: Pielou's J and Williams' W calculations.
+- [x] Task: Implement `calculate_rarity_metrics()` (Area/Abundance based).
+  - Added: Area-based rarity and abundance-based rarity metrics.
 - [ ] Task: Conductor - User Manual Verification 'Diversity and Rarity' (Protocol in workflow.md)
 
 ## Phase 2: Specialized Indicators Integration
