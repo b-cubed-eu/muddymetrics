@@ -4,9 +4,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-## [x] Track: Refactor Codebase for Usability and Modularity
-*Link: [./conductor/tracks/refactor_codebase_20260130/](./conductor/tracks/refactor_codebase_20260130/)*
-
 ## [ ] Track: Global Data Sufficiency Assessment
 *Link: [./conductor/tracks/global_sufficiency_20260130/](./conductor/tracks/global_sufficiency_20260130/)*
 
