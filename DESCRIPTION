@@ -14,7 +14,9 @@ Imports:
     ggplot2,
     rgbif,
     utils,
-    tools
+    tools,
+    vegan,
+    readr
 Suggests: 
     testthat (>= 3.0.0),
     covr,

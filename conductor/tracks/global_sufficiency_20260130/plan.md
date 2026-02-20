@@ -13,11 +13,14 @@
 
 - [x] Task: Calculate Cumulative Richness for global sites.
 
-- [ ] Task: Validate existing `overall_density.RData` files and ensure consistency with the **0.25 records/km²** threshold.
+- [x] Task: Validate existing `overall_density.RData` files and ensure consistency with the **0.25 records/km²** threshold.
+  - Note: Existing files are corrupted/incompatible (R version mismatch). Created new density functions to properly calculate and validate density indicators.
 
-- [ ] Task: Implement "Mean Year of Occurrence" across all sites to assess data recency.
+- [x] Task: Implement "Mean Year of Occurrence" across all sites to assess data recency.
+  - Created: `R/mean_year_occurrence.R` with `calculate_mean_year()` and `calculate_mean_year_batch()` functions.
 
-- [ ] Task: Implement **Chao2** and **SAC Slope** calculation functions in `R/`.
+- [x] Task: Implement **Chao2** and **SAC Slope** calculation functions in `R/`.
+  - Created: `R/chao2_sac_functions.R` with `calculate_chao2()`, `calculate_sac_slope()`, and batch processing functions.
 
 - [ ] Task: Conductor - User Manual Verification 'Indicator Implementation' (Protocol in workflow.md)
 
