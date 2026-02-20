@@ -1,14 +1,14 @@
 # Track Plan: Indicator Robustness and Validation
 
 ## Phase 1: Dubicube Integration
-- [x] Task: Install and explore `dubicube` package capabilities and documentation.
+- [x] Task: Install and explore `dubicube` package capabilities and documentation. [7532562]
   - Installed with pdindicatoR/impIndicator from b-cubed-eu.r-universe.dev
-- [x] Task: Create a prototype script `scripts/test_dubicube.R` to run robustness checks on a single site.
+- [x] Task: Create a prototype script `scripts/test_dubicube.R` to run robustness checks on a single site. [7532562]
   - Created: R/robustness_functions.R with full wrapper functions
 - [ ] Task: Conductor - User Manual Verification 'Dubicube Prototype' (Protocol in workflow.md)
 
 ## Phase 2: Pipeline Integration
-- [x] Task: Create a wrapper function `assess_indicator_robustness()` that accepts a data cube and indicator function.
+- [x] Task: Create a wrapper function `assess_indicator_robustness()` that accepts a data cube and indicator function. [7532562]
   - Created: R/robustness_functions.R with assess_indicator_robustness(), cross_validate_indicator()
 - [ ] Task: Integrate this function into the `run_european_deep_dive.R` workflow.
 - [ ] Task: Conductor - User Manual Verification 'Pipeline Integration' (Protocol in workflow.md)
