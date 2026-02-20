@@ -28,11 +28,11 @@
 
 ## Phase 3: Global Execution and Aggregation
 
-- [x] Task: Create a script `R/aggregate_global_results.R` to consolidate all site-level `.RData` files into a single master dataset.
+- [x] Task: Create a script `R/aggregate_global_results.R` to consolidate all site-level `.RData` files into a single master dataset. [5cc8096]
   - Created: `aggregate_global_results()`, `generate_global_summary()`, `perform_data_gap_analysis()` functions.
 
-- [x] Task: Generate a global summary CSV `output/global_sufficiency_summary.csv` with key metrics for all ~2,500 sites.
+- [x] Task: Generate a global summary CSV `output/global_sufficiency_summary.csv` with key metrics for all ~2,500 sites. [5cc8096]
 
-- [x] Task: Perform "Data Gap Analysis" and classify sites into **Data-Rich** vs **Data-Poor** cohorts based on the Troia 2016 criteria (Density ≥ 0.25, Chao2 ≥ 0.7, Slope ≤ 0.1).
+- [x] Task: Perform "Data Gap Analysis" and classify sites into **Data-Rich** vs **Data-Poor** cohorts based on the Troia 2016 criteria (Density ≥ 0.25, Chao2 ≥ 0.7, Slope ≤ 0.1). [5cc8096]
 
 - [ ] Task: Conductor - User Manual Verification 'Global Execution' (Protocol in workflow.md)
