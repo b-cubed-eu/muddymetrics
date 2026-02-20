@@ -4,7 +4,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-## [ ] Track: Global Data Sufficiency Assessment
+## [x] Track: Global Data Sufficiency Assessment [complete]
 *Link: [./conductor/tracks/global_sufficiency_20260130/](./conductor/tracks/global_sufficiency_20260130/)*
 
 ## [ ] Track: Advanced Ecological Analysis (European Deep Dive)
