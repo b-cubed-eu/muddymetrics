@@ -10,9 +10,12 @@
 - [ ] Task: Conductor - User Manual Verification 'Diversity and Rarity' (Protocol in workflow.md)
 
 ## Phase 2: Specialized Indicators Integration
-- [ ] Task: Install and configure `pdindicatoR` and `impIndicatoR` packages.
-- [ ] Task: Implement wrapper function `calculate_phylogenetic_diversity()` using `pdindicatoR`.
-- [ ] Task: Implement wrapper function `calculate_invasive_impact()` using `impIndicatoR` and EICAT data.
+- [x] Task: Install and configure `pdindicatoR` and `impIndicatoR` packages.
+  - Installed from https://b-cubed-eu.r-universe.dev
+- [x] Task: Implement wrapper function `calculate_phylogenetic_diversity()` using `pdindicatoR`.
+  - Created: R/specialized_indicators.R with pdindicatoR wrapper
+- [x] Task: Implement wrapper function `calculate_invasive_impact()` using `impIndicator` and EICAT data.
+  - Added: impIndicator wrapper with EICAT integration
 - [ ] Task: Conductor - User Manual Verification 'Specialized Integration' (Protocol in workflow.md)
 
 ## Phase 3: European Regional Analysis

@@ -16,7 +16,11 @@ Imports:
     utils,
     tools,
     vegan,
-    readr
+    readr,
+    pdindicatoR,
+    impIndicator,
+    dubicube,
+    ape
 Suggests: 
     testthat (>= 3.0.0),
     covr,
