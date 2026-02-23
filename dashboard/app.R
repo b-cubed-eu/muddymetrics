@@ -2,7 +2,6 @@ library(shiny)
 library(leaflet)
 library(dplyr)
 library(ggplot2)
-library(viridis)
 library(plotly)
 library(DT)
 library(bslib)
@@ -38,7 +37,7 @@ ui <- fluidPage(
     mainPanel(
       tabsetPanel(
         tabPanel("Map & Sites",
-                 p("Click on a marker to select a site. Use the sidebar to filter by continent/country."),
+                 p("Click on a marker to select a site."),
                  leafletOutput("global_map", height = 500),
                  DT::dataTableOutput("sites_table", height = 300)),
         
@@ -48,8 +47,7 @@ ui <- fluidPage(
                  plotlyOutput("occurrence_ts", height = 300)),
         
         tabPanel("Country Overview",
-                 plotlyOutput("sites_by_country", height = 400),
-                 plotlyOutput("occurrences_by_country", height = 400))
+                 plotlyOutput("sites_by_country", height = 400))
       )
     )
   )
@@ -143,14 +141,14 @@ server <- function(input, output, session) {
     selected <- get_current_site_id()
     
     if (is.null(selected)) {
-      return("No site selected\n\nClick on map\nor table to select")
+      return("No site selected\n\nClick on map to select")
     }
     
     data <- get_site_data()
     site_data <- data[data$site_id == selected, ]
     
     if (nrow(site_data) == 0) {
-      return("No site selected\n\nClick on map\nor table to select")
+      return("No site selected\n\nClick on map to select")
     }
     
     paste0(
@@ -234,14 +232,11 @@ server <- function(input, output, session) {
     
     if (!is.null(input$global_map_marker_click)) {
       selected_site <- input$global_map_marker_click$id
-    } else if (!is.null(input$sites_table_rows_selected)) {
-      data <- get_filtered_data()
-      selected_site <- data$site_id[input$sites_table_rows_selected[1]]
     }
     
     if (is.null(selected_site)) {
       return(div(
-        p("Select a site from the map or table above to view details."),
+        p("Select a site from the map to view details."),
         style = "color: gray; padding: 20px;"
       ))
     }
@@ -359,51 +354,24 @@ server <- function(input, output, session) {
       summarise(n = n()) |>
       arrange(desc(n))
     
+    n_countries <- nrow(country_counts)
+    
+    if (n_countries == 0) {
+      return(plot_ly() |>
+        add_text(x = 0.5, y = 0.5, text = "No data") |>
+        layout(title = "Sites by Country"))
+    }
+    
+    if (n_countries > 20) {
+      country_counts <- head(country_counts, 20)
+    }
+    
     plot_ly(country_counts, x = ~reorder(country, -n), y = ~n, type = "bar",
             marker = list(color = "#2E86AB")) |>
       layout(
         title = "Number of Sites by Country",
         xaxis = list(title = "Country", tickangle = 45),
         yaxis = list(title = "Number of Sites"),
-        margin = list(b = 100)
-      )
-  })
-  
-  output$occurrences_by_country <- renderPlotly({
-    data <- get_filtered_data()
-    
-    country_occ <- list()
-    
-    for (i in 1:nrow(data)) {
-      csv_file <- find_site_csv(data$site_id[i])
-      if (!is.null(csv_file)) {
-        tryCatch({
-          site_data <- read.csv(csv_file)
-          total_occ <- sum(site_data$occurrences, na.rm = TRUE)
-          country_occ[[data$country[i]]] <- c(country_occ[[data$country[i]]], total_occ)
-        }, error = function(e) NULL)
-      }
-    }
-    
-    occ_sum <- data.frame(
-      country = names(country_occ),
-      total_occ = sapply(country_occ, sum),
-      stringsAsFactors = FALSE
-    ) |>
-      arrange(desc(total_occ))
-    
-    if (nrow(occ_sum) == 0) {
-      return(plot_ly() |>
-        add_text(x = 0.5, y = 0.5, text = "No occurrence data available") |>
-        layout(title = "Total Occurrences by Country"))
-    }
-    
-    plot_ly(occ_sum, x = ~reorder(country, -total_occ), y = ~total_occ, type = "bar",
-            marker = list(color = "#A23B72")) |>
-      layout(
-        title = "Total Occurrences by Country",
-        xaxis = list(title = "Country", tickangle = 45),
-        yaxis = list(title = "Total Occurrences"),
         margin = list(b = 100)
       )
   })
