@@ -225,8 +225,6 @@ server <- function(input, output, session) {
       DT::datatable(
         rownames = FALSE,
         colnames = c("Site Name", "Country", "Continent", "Latitude", "Longitude"),
-        selection = "single",
-        server = FALSE,
         options = list(pageLength = 10)
       )
   })
@@ -267,10 +265,6 @@ server <- function(input, output, session) {
   get_current_site_id <- reactive({
     if (!is.null(input$global_map_marker_click)) {
       return(input$global_map_marker_click$id)
-    }
-    if (!is.null(input$sites_table_rows_selected)) {
-      data <- get_filtered_data()
-      return(data$site_id[input$sites_table_rows_selected[1]])
     }
     return(NULL)
   })
