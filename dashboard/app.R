@@ -199,12 +199,8 @@ server <- function(input, output, session) {
     selected_site(input$global_map_marker_click$id)
   })
   
-  observeEvent(input$sites_table_click, {
-    data <- get_filtered_data()
-    row <- input$sites_table_click$row
-    if (!is.null(row) && row <= nrow(data)) {
-      selected_site(data$site_id[row])
-    }
+  observeEvent(input$table_site_click, {
+    selected_site(input$table_site_click)
   })
   
   output$global_map <- renderLeaflet({
@@ -247,24 +243,33 @@ server <- function(input, output, session) {
   output$sites_table <- DT::renderDataTable({
     data <- get_filtered_data()
     
-    data |>
-      select(site_name, country, continent, lon, lat) |>
-      mutate(lat = round(lat, 4), lon = round(lon, 4)) |>
-      DT::datatable(
-        rownames = FALSE,
-        colnames = c("Site Name", "Country", "Continent", "Latitude", "Longitude"),
-        selection = "none",
-        options = list(
-          pageLength = 10,
-          rowCallback = DT::JS(
-            "function(row, data) {",
-            "  $(row).on('click', function() {",
-            "    Shiny.setInputValue('sites_table_click', {row: row.index() + 1});",
-            "  });",
-            "}"
-          )
+    data_display <- data |>
+      select(site_name, country, continent, lon, lat, site_id) |>
+      mutate(lat = round(lat, 4), lon = round(lon, 4))
+    
+    datatable <- DT::datatable(
+      data_display,
+      rownames = FALSE,
+      colnames = c("Site Name", "Country", "Continent", "Latitude", "Longitude", ""),
+      selection = "none",
+      options = list(
+        pageLength = 10,
+        columnDefs = list(
+          list(visible = FALSE, targets = 5)
+        ),
+        rowCallback = DT::JS(
+          "function(row, data) {",
+          "  $(row).css('cursor', 'pointer');",
+          "  $(row).on('click', function() {",
+          "    var siteId = data[5];",
+          "    Shiny.setInputValue('table_site_click', siteId);",
+          "  });",
+          "}"
         )
       )
+    )
+    
+    datatable
   })
   
   output$site_header <- renderUI({
