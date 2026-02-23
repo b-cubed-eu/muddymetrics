@@ -37,8 +37,8 @@ ui <- fluidPage(
     mainPanel(
       tabsetPanel(
         tabPanel("Map & Sites",
-                 p("Click on a marker to select a site."),
-                 leafletOutput("global_map", height = 500),
+                 p("Click on a marker or table row to select a site."),
+                 leafletOutput("global_map", height = 450),
                  DT::dataTableOutput("sites_table", height = 300)),
         
         tabPanel("Site Details",
@@ -137,18 +137,20 @@ server <- function(input, output, session) {
     bind_rows(sites)
   })
   
+  selected_site <- reactiveVal(NULL)
+  
   output$selected_site_info <- renderText({
-    selected <- get_current_site_id()
+    sel <- selected_site()
     
-    if (is.null(selected)) {
-      return("No site selected\n\nClick on map to select")
+    if (is.null(sel)) {
+      return("No site selected\n\nClick on map\nor table to select")
     }
     
     data <- get_site_data()
-    site_data <- data[data$site_id == selected, ]
+    site_data <- data[data$site_id == sel, ]
     
     if (nrow(site_data) == 0) {
-      return("No site selected\n\nClick on map to select")
+      return("No site selected\n\nClick on map\nor table to select")
     }
     
     paste0(
@@ -193,9 +195,23 @@ server <- function(input, output, session) {
     data
   })
   
+  observeEvent(input$global_map_marker_click, {
+    selected_site(input$global_map_marker_click$id)
+  })
+  
+  observeEvent(input$sites_table_click, {
+    data <- get_filtered_data()
+    row <- input$sites_table_click$row
+    if (!is.null(row) && row <= nrow(data)) {
+      selected_site(data$site_id[row])
+    }
+  })
+  
   output$global_map <- renderLeaflet({
     data <- get_filtered_data()
     data <- data[!is.na(data$lon) & !is.na(data$lat), ]
+    
+    selected <- selected_site()
     
     leaflet(data) |>
       addTiles() |>
@@ -208,10 +224,15 @@ server <- function(input, output, session) {
           "<i>Click to select</i>"
         ),
         radius = 6,
-        color = "#2E86AB",
+        color = ifelse(site_id == selected, "#E63946", "#2E86AB"),
         fillOpacity = 0.8
       ) |>
-      setView(lng = 10, lat = 50, zoom = 4)
+      fitBounds(
+        lng1 = min(data$lon, na.rm = TRUE),
+        lat1 = min(data$lat, na.rm = TRUE),
+        lng2 = max(data$lon, na.rm = TRUE),
+        lat2 = max(data$lat, na.rm = TRUE)
+      )
   })
   
   output$sites_table <- DT::renderDataTable({
@@ -223,26 +244,32 @@ server <- function(input, output, session) {
       DT::datatable(
         rownames = FALSE,
         colnames = c("Site Name", "Country", "Continent", "Latitude", "Longitude"),
-        options = list(pageLength = 10)
+        selection = "none",
+        options = list(
+          pageLength = 10,
+          rowCallback = DT::JS(
+            "function(row, data) {",
+            "  $(row).on('click', function() {",
+            "    Shiny.setInputValue('sites_table_click', {row: row.index() + 1});",
+            "  });",
+            "}"
+          )
+        )
       )
   })
   
   output$site_header <- renderUI({
-    selected_site <- NULL
+    sel <- selected_site()
     
-    if (!is.null(input$global_map_marker_click)) {
-      selected_site <- input$global_map_marker_click$id
-    }
-    
-    if (is.null(selected_site)) {
+    if (is.null(sel)) {
       return(div(
-        p("Select a site from the map to view details."),
+        p("Select a site from the map or table to view details."),
         style = "color: gray; padding: 20px;"
       ))
     }
     
     data <- get_site_data()
-    site_data <- data[data$site_id == selected_site, ]
+    site_data <- data[data$site_id == sel, ]
     
     if (nrow(site_data) == 0) return(NULL)
     
@@ -255,13 +282,6 @@ server <- function(input, output, session) {
           round(site_data$lat, 4), ", ", round(site_data$lon, 4)
         ) else "N/A")
     )
-  })
-  
-  get_current_site_id <- reactive({
-    if (!is.null(input$global_map_marker_click)) {
-      return(input$global_map_marker_click$id)
-    }
-    return(NULL)
   })
   
   find_site_csv <- function(site_id) {
@@ -291,10 +311,10 @@ server <- function(input, output, session) {
   }
   
   output$richness_ts <- renderPlotly({
-    site_id <- get_current_site_id()
-    req(site_id)
+    sel <- selected_site()
+    req(sel)
     
-    csv_file <- find_site_csv(site_id)
+    csv_file <- find_site_csv(sel)
     
     if (!is.null(csv_file)) {
       site_data <- read.csv(csv_file)
@@ -319,10 +339,10 @@ server <- function(input, output, session) {
   })
   
   output$occurrence_ts <- renderPlotly({
-    site_id <- get_current_site_id()
-    req(site_id)
+    sel <- selected_site()
+    req(sel)
     
-    csv_file <- find_site_csv(site_id)
+    csv_file <- find_site_csv(sel)
     
     if (!is.null(csv_file)) {
       site_data <- read.csv(csv_file)
