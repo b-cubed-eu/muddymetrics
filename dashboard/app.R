@@ -64,12 +64,27 @@ ui <- fluidPage(
 server <- function(input, output, session) {
 
   get_site_data <- reactive({
-    data_dir <- "inst/extdata/ramsar_site_data_100m_europe"
-    shapefile_dir <- "inst/extdata/ramsar_sites_wkt"
+    base_dir <- "inst/extdata"
+    shapefile_dir <- file.path(base_dir, "ramsar_sites_wkt")
+    
+    continent_map <- c(
+      "ramsar_site_data_100m_africa" = "Africa",
+      "ramsar_site_data_100m_antarctica" = "Antarctica",
+      "ramsar_site_data_100m_asia" = "Asia",
+      "ramsar_site_data_100m_europe" = "Europe",
+      "ramsar_site_data_100m_northamerica" = "North America",
+      "ramsar_site_data_100m_oceania" = "Oceania",
+      "ramsar_site_data_100m_southamerica" = "South America"
+    )
     
     sites <- list()
     
-    if (dir.exists(data_dir)) {
+    for (data_dir_name in names(continent_map)) {
+      data_dir <- file.path(base_dir, data_dir_name)
+      continent <- continent_map[[data_dir_name]]
+      
+      if (!dir.exists(data_dir)) next
+      
       countries <- list.files(data_dir)
       
       for (country in countries) {
@@ -98,12 +113,24 @@ server <- function(input, output, session) {
             site_id = site_id,
             site_name = site_name,
             country = country,
-            continent = "Europe",
+            continent = continent,
             lon = if (!is.null(coords)) coords[1] else NA,
             lat = if (!is.null(coords)) coords[2] else NA
           )
         }
       }
+    }
+    
+    if (length(sites) == 0) {
+      return(data.frame(
+        site_id = character(),
+        site_name = character(),
+        country = character(),
+        continent = character(),
+        lon = numeric(),
+        lat = numeric(),
+        stringsAsFactors = FALSE
+      ))
     }
     
     bind_rows(sites)
@@ -230,18 +257,38 @@ server <- function(input, output, session) {
     )
   })
   
-  output$richness_ts <- renderPlotly({
-    req(input$site)
+  find_site_csv <- function(site_id) {
+    base_dir <- "inst/extdata"
     
-    data_dir <- "inst/extdata/ramsar_site_data_100m_europe"
+    continent_map <- c(
+      "ramsar_site_data_100m_africa" = "Africa",
+      "ramsar_site_data_100m_antarctica" = "Antarctica",
+      "ramsar_site_data_100m_asia" = "Asia",
+      "ramsar_site_data_100m_europe" = "Europe",
+      "ramsar_site_data_100m_northamerica" = "North America",
+      "ramsar_site_data_100m_oceania" = "Oceania",
+      "ramsar_site_data_100m_southamerica" = "South America"
+    )
     
-    parts <- strsplit(input$site, "_")[[1]]
+    parts <- strsplit(site_id, "_")[[1]]
     country <- parts[1]
     site_name <- paste(parts[-1], collapse = "_")
     
-    csv_file <- file.path(data_dir, country, paste0(site_name, "_data.csv"))
+    for (dir_name in names(continent_map)) {
+      csv_file <- file.path(base_dir, dir_name, country, paste0(site_name, "_data.csv"))
+      if (file.exists(csv_file)) {
+        return(csv_file)
+      }
+    }
+    return(NULL)
+  }
+  
+  output$richness_ts <- renderPlotly({
+    req(input$site)
     
-    if (file.exists(csv_file)) {
+    csv_file <- find_site_csv(input$site)
+    
+    if (!is.null(csv_file)) {
       site_data <- read.csv(csv_file)
       
       yearly <- site_data |>
@@ -264,15 +311,9 @@ server <- function(input, output, session) {
   output$occurrence_ts <- renderPlotly({
     req(input$site)
     
-    data_dir <- "inst/extdata/ramsar_site_data_100m_europe"
+    csv_file <- find_site_csv(input$site)
     
-    parts <- strsplit(input$site, "_")[[1]]
-    country <- parts[1]
-    site_name <- paste(parts[-1], collapse = "_")
-    
-    csv_file <- file.path(data_dir, country, paste0(site_name, "_data.csv"))
-    
-    if (file.exists(csv_file)) {
+    if (!is.null(csv_file)) {
       site_data <- read.csv(csv_file)
       
       yearly <- site_data |>
