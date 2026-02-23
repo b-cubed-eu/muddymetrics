@@ -4,57 +4,57 @@ library(dplyr)
 library(ggplot2)
 library(viridis)
 library(plotly)
+library(DT)
+library(bslib)
+library(sf)
 
 ui <- fluidPage(
   theme = bslib::bs_theme(version = 5, bootswatch = "cosmo"),
-
+  
   titlePanel("Muddymetrics: Ramsar Site Biodiversity Dashboard"),
-
+  
   sidebarLayout(
     sidebarPanel(
       h4("Filters"),
-
+      
       selectInput("continent",
                   "Select Continent:",
                   choices = c("All", "Africa", "Antarctica", "Asia", "Europe",
                               "North America", "Oceania", "South America"),
                   selected = "All"),
-
+      
       selectInput("country",
                   "Select Country:",
                   choices = NULL),
-
+      
       selectInput("site",
                   "Select Site:",
                   choices = NULL),
-
+      
       hr(),
-
-      h4("Data Sufficiency"),
-      verbatimTextOutput("site_summary"),
-
+      
+      h4("Summary"),
+      verbatimTextOutput("summary_stats"),
+      
       width = 3
     ),
-
+    
     mainPanel(
       tabsetPanel(
         tabPanel("Global Map",
                  leafletOutput("global_map", height = 600)),
-
+        
         tabPanel("Data Sufficiency",
                  plotlyOutput("density_hist", height = 400),
                  DT::dataTableOutput("sufficiency_table")),
-
+        
         tabPanel("Site Details",
                  uiOutput("site_header"),
                  plotlyOutput("richness_ts", height = 300),
                  plotlyOutput("occurrence_ts", height = 300)),
-
+        
         tabPanel("Country Comparison",
-                 plotlyOutput("country_violin", height = 500)),
-
-        tabPanel("About",
-                 includeMarkdown("README.md"))
+                 plotlyOutput("country_violin", height = 500))
       )
     )
   )
@@ -63,39 +63,88 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
 
-  summary_data <- reactiveFileReader(
-    intervalMillis = 5000,
-    session = session,
-    filePath = "output/global_sufficiency_summary.csv",
-    readFunc = read.csv
-  )
-
+  get_site_data <- reactive({
+    data_dir <- "inst/extdata/ramsar_site_data_100m_europe"
+    shapefile_dir <- "inst/extdata/ramsar_sites_wkt"
+    
+    sites <- list()
+    
+    if (dir.exists(data_dir)) {
+      countries <- list.files(data_dir)
+      
+      for (country in countries) {
+        country_dir <- file.path(data_dir, country)
+        if (!dir.exists(country_dir)) next
+        
+        files <- list.files(country_dir, pattern = "\\.csv$")
+        
+        for (f in files) {
+          site_name <- sub("_data\\.csv$", "", f)
+          site_id <- paste0(country, "_", site_name)
+          
+          wkt_file <- file.path(shapefile_dir, country, paste0(site_name, ".wkt"))
+          
+          coords <- NULL
+          if (file.exists(wkt_file)) {
+            tryCatch({
+              wkt <- readLines(wkt_file, warn = FALSE)
+              geom <- sf::st_as_sfc(wkt)
+              centroids <- sf::st_centroid(geom)
+              coords <- sf::st_coordinates(centroids)
+            }, error = function(e) NULL)
+          }
+          
+          sites[[length(sites) + 1]] <- list(
+            site_id = site_id,
+            site_name = site_name,
+            country = country,
+            continent = "Europe",
+            lon = if (!is.null(coords)) coords[1] else NA,
+            lat = if (!is.null(coords)) coords[2] else NA
+          )
+        }
+      }
+    }
+    
+    bind_rows(sites)
+  })
+  
+  output$summary_stats <- renderText({
+    data <- get_site_data()
+    req(nrow(data) > 0)
+    
+    paste0(
+      "Total Sites: ", nrow(data), "\n",
+      "Countries: ", length(unique(data$country))
+    )
+  })
+  
   observe({
-    data <- summary_data()
+    data <- get_site_data()
     continents <- unique(data$continent)
     updateSelectInput(session, "continent",
                      choices = c("All", sort(continents)))
   })
-
+  
   observe({
-    data <- summary_data()
+    data <- get_site_data()
     cont <- input$continent
-
+    
     if (cont == "All") {
       countries <- unique(data$country)
     } else {
       countries <- unique(data$country[data$continent == cont])
     }
-
+    
     updateSelectInput(session, "country",
                      choices = c("All", sort(countries)))
   })
-
+  
   observe({
-    data <- summary_data()
+    data <- get_site_data()
     cont <- input$continent
     country <- input$country
-
+    
     if (cont == "All" && country == "All") {
       sites <- unique(data$site_id)
     } else if (cont != "All" && country == "All") {
@@ -105,118 +154,157 @@ server <- function(input, output, session) {
     } else {
       sites <- unique(data$site_id[data$continent == cont & data$country == country])
     }
-
+    
     updateSelectInput(session, "site", choices = sort(sites))
   })
-
+  
   output$global_map <- renderLeaflet({
-    data <- summary_data()
-
+    data <- get_site_data()
+    
     if (input$continent != "All") {
       data <- data[data$continent == input$continent, ]
     }
-
+    
     if (input$country != "All") {
       data <- data[data$country == input$country, ]
     }
-
-    pal <- colorFactor(c("red", "green"), domain = c("Data-Poor", "Data-Rich"))
-
+    
+    data <- data[!is.na(data$lon) & !is.na(data$lat), ]
+    
     leaflet(data) |>
       addTiles() |>
       addCircleMarkers(
-        ~as.numeric(sub(".*_", "", sub("site_", "", site_id))),
-        ~as.numeric(sub(".*_", "", sub("site_", "", site_id))) * 0.5,
-        color = ~pal(data_class),
+        ~lon, ~lat,
         popup = ~paste0(
           "<b>", site_name, "</b><br>",
-          "Country: ", country, "<br>",
-          "Density: ", round(density_km2, 3), "<br>",
-          "Status: ", data_class
+          "Country: ", country
         ),
-        radius = 5
+        radius = 5,
+        color = "blue",
+        fillOpacity = 0.7
       ) |>
-      addLegend(position = "bottomright",
-                pal = pal,
-                values = ~data_class,
-                title = "Data Status")
+      setView(lng = 10, lat = 50, zoom = 4)
   })
-
+  
   output$density_hist <- renderPlotly({
-    data <- summary_data()
-
-    if (input$continent != "All") {
-      data <- data[data$continent == input$continent, ]
-    }
-
-    if (input$country != "All") {
-      data <- data[data$country == input$country, ]
-    }
-
-    plot_ly(data, x = ~density_km2, type = "histogram",
-            marker = list(color = "#1f77b4")) |>
+    data <- get_site_data()
+    
+    plot_ly(data, x = ~country, type = "histogram") |>
       layout(
-        title = "Distribution of Occurrence Density",
-        xaxis = list(title = "Density (records/km²)"),
+        title = "Sites by Country",
+        xaxis = list(title = "Country"),
         yaxis = list(title = "Count")
       )
   })
-
+  
   output$sufficiency_table <- DT::renderDataTable({
-    data <- summary_data()
-
+    data <- get_site_data()
+    
     if (input$continent != "All") {
       data <- data[data$continent == input$continent, ]
     }
-
+    
     if (input$country != "All") {
       data <- data[data$country == input$country, ]
     }
-
+    
     data |>
-      select(site_name, country, density_km2, data_class) |>
+      select(site_name, country, continent) |>
       DT::datatable()
   })
-
+  
   output$site_header <- renderUI({
-    data <- summary_data()
+    data <- get_site_data()
     site_data <- data[data$site_id == input$site, ]
-
+    
     if (nrow(site_data) == 0) return(NULL)
-
+    
     wellPanel(
       h3(site_data$site_name),
       p(strong("Country:"), site_data$country),
-      p(strong("Density:"), round(site_data$density_km2, 3), "records/km²"),
-      p(strong("Status:"), site_data$data_class)
+      p(strong("Continent:"), site_data$continent),
+      p(strong("Coordinates:"), 
+        if (!is.na(site_data$lon)) paste0(
+          round(site_data$lat, 4), ", ", round(site_data$lon, 4)
+        ) else "N/A")
     )
   })
-
+  
   output$richness_ts <- renderPlotly({
-    plot_ly(x = 1:10, y = rnorm(10), type = "scatter", mode = "lines") |>
-      layout(title = "Species Richness Over Time",
-             xaxis = list(title = "Year"),
-             yaxis = list(title = "Species Richness"))
-  })
-
-  output$occurrence_ts <- renderPlotly({
-    plot_ly(x = 1:10, y = rnorm(10), type = "scatter", mode = "lines") |>
-      layout(title = "Total Occurrences Over Time",
-             xaxis = list(title = "Year"),
-             yaxis = list(title = "Occurrences"))
-  })
-
-  output$country_violin <- renderPlotly({
-    data <- summary_data()
-
-    if (input$continent != "All") {
-      data <- data[data$continent == input$continent, ]
+    req(input$site)
+    
+    data_dir <- "inst/extdata/ramsar_site_data_100m_europe"
+    
+    parts <- strsplit(input$site, "_")[[1]]
+    country <- parts[1]
+    site_name <- paste(parts[-1], collapse = "_")
+    
+    csv_file <- file.path(data_dir, country, paste0(site_name, "_data.csv"))
+    
+    if (file.exists(csv_file)) {
+      site_data <- read.csv(csv_file)
+      
+      yearly <- site_data |>
+        group_by(year) |>
+        summarise(n_species = n_distinct(specieskey))
+      
+      plot_ly(yearly, x = ~year, y = ~n_species, type = "scatter", mode = "lines+markers") |>
+        layout(
+          title = "Species Richness Over Time",
+          xaxis = list(title = "Year"),
+          yaxis = list(title = "Number of Species")
+        )
+    } else {
+      plot_ly() |>
+        add_text(x = 0.5, y = 0.5, text = "No data available") |>
+        layout(title = "Species Richness Over Time")
     }
-
-    plot_ly(data, x = ~country, y = ~density_km2, type = "violin") |>
-      layout(title = "Density by Country",
-             xaxis = list(title = "Country"),
-             yaxis = list(title = "Density (records/km²)"))
+  })
+  
+  output$occurrence_ts <- renderPlotly({
+    req(input$site)
+    
+    data_dir <- "inst/extdata/ramsar_site_data_100m_europe"
+    
+    parts <- strsplit(input$site, "_")[[1]]
+    country <- parts[1]
+    site_name <- paste(parts[-1], collapse = "_")
+    
+    csv_file <- file.path(data_dir, country, paste0(site_name, "_data.csv"))
+    
+    if (file.exists(csv_file)) {
+      site_data <- read.csv(csv_file)
+      
+      yearly <- site_data |>
+        group_by(year) |>
+        summarise(total_occ = sum(occurrences))
+      
+      plot_ly(yearly, x = ~year, y = ~total_occ, type = "scatter", mode = "lines+markers") |>
+        layout(
+          title = "Total Occurrences Over Time",
+          xaxis = list(title = "Year"),
+          yaxis = list(title = "Total Occurrences")
+        )
+    } else {
+      plot_ly() |>
+        add_text(x = 0.5, y = 0.5, text = "No data available") |>
+        layout(title = "Total Occurrences Over Time")
+    }
+  })
+  
+  output$country_violin <- renderPlotly({
+    data <- get_site_data()
+    
+    country_counts <- data |>
+      group_by(country) |>
+      summarise(n = n())
+    
+    plot_ly(country_counts, x = ~reorder(country, -n), y = ~n, type = "bar") |>
+      layout(
+        title = "Number of Sites by Country",
+        xaxis = list(title = "Country", tickangle = 45),
+        yaxis = list(title = "Number of Sites")
+      )
   })
 }
 
