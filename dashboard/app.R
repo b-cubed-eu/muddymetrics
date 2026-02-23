@@ -140,9 +140,24 @@ server <- function(input, output, session) {
   })
   
   output$selected_site_info <- renderText({
-    req(input$global_map_marker_click)
-    click <- input$global_map_marker_click
-    paste0("Selected:\n", click$popup)
+    selected <- get_current_site_id()
+    
+    if (is.null(selected)) {
+      return("No site selected\n\nClick on map\nor table to select")
+    }
+    
+    data <- get_site_data()
+    site_data <- data[data$site_id == selected, ]
+    
+    if (nrow(site_data) == 0) {
+      return("No site selected\n\nClick on map\nor table to select")
+    }
+    
+    paste0(
+      "Site: ", site_data$site_name, "\n",
+      "Country: ", site_data$country, "\n",
+      "Continent: ", site_data$continent
+    )
   })
   
   observe({
@@ -211,6 +226,7 @@ server <- function(input, output, session) {
         rownames = FALSE,
         colnames = c("Site Name", "Country", "Continent", "Latitude", "Longitude"),
         selection = "single",
+        server = FALSE,
         options = list(pageLength = 10)
       )
   })
