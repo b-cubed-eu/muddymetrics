@@ -213,7 +213,7 @@ server <- function(input, output, session) {
     
     selected <- selected_site()
     
-    leaflet(data) |>
+    map <- leaflet(data) |>
       addTiles() |>
       addCircleMarkers(
         ~lon, ~lat,
@@ -226,13 +226,22 @@ server <- function(input, output, session) {
         radius = 6,
         color = ifelse(site_id == selected, "#E63946", "#2E86AB"),
         fillOpacity = 0.8
-      ) |>
-      fitBounds(
-        lng1 = min(data$lon, na.rm = TRUE),
-        lat1 = min(data$lat, na.rm = TRUE),
-        lng2 = max(data$lon, na.rm = TRUE),
-        lat2 = max(data$lat, na.rm = TRUE)
       )
+    
+    if (nrow(data) > 0) {
+      map <- map |>
+        fitBounds(
+          lng1 = min(data$lon, na.rm = TRUE),
+          lat1 = min(data$lat, na.rm = TRUE),
+          lng2 = max(data$lon, na.rm = TRUE),
+          lat2 = max(data$lat, na.rm = TRUE)
+        )
+    } else {
+      map <- map |>
+        setView(lng = 10, lat = 50, zoom = 4)
+    }
+    
+    map
   })
   
   output$sites_table <- DT::renderDataTable({
