@@ -63,8 +63,16 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
 
+  get_base_dir <- function() {
+    app_dir <- getwd()
+    if (basename(app_dir) == "dashboard") {
+      return(file.path(app_dir, ".."))
+    }
+    return(app_dir)
+  }
+
   get_site_data <- reactive({
-    base_dir <- "inst/extdata"
+    base_dir <- file.path(get_base_dir(), "inst", "extdata")
     shapefile_dir <- file.path(base_dir, "ramsar_sites_wkt")
     
     continent_map <- c(
@@ -258,7 +266,7 @@ server <- function(input, output, session) {
   })
   
   find_site_csv <- function(site_id) {
-    base_dir <- "inst/extdata"
+    base_dir <- file.path(get_base_dir(), "inst", "extdata")
     
     continent_map <- c(
       "ramsar_site_data_100m_africa" = "Africa",
