@@ -20,7 +20,7 @@ ramsar_global <- sf::st_read(ramsar_global_path, quiet = TRUE)
 if (inherits(ramsar_global, "try-error")) {
   stop("FATAL ERROR: Could not read the global Ramsar shapefile. Please check the file path and format.")
 }
-ramsar_global %>% # fix bad country names
+ramsar_global |> # fix bad country names
   dplyr::mutate(
     country_en = dplyr::case_when(
       country_en == "C\xf4te d'Ivoire" ~ "Cote dIvoire",
@@ -68,8 +68,8 @@ original_s2_setting <- sf_use_s2() # Capture original setting
 sf_use_s2(FALSE) # Disable s2 for this operation to avoid issues with complex geometries
 
 # Now, group and union the *valid* geometries with a robust error handling for st_union
-ramsar_global_consolidated <- ramsar_global_valid %>%
-  group_by(ramsar_site_id, country_en, officialna) %>% # Include officialna to retain it for sanitization
+ramsar_global_consolidated <- ramsar_global_valid |>
+  group_by(ramsar_site_id, country_en, officialna) |> # Include officialna to retain it for sanitization
   summarise(
     geometry = {
       # Attempt to union the geometries for the current group
@@ -85,14 +85,14 @@ ramsar_global_consolidated <- ramsar_global_valid %>%
       union_result
     },
     .groups = "drop"
-  ) %>%
+  ) |>
   st_as_sf()
 
 sf_use_s2(original_s2_setting) # Always restore s2 setting
 
 message(paste("Consolidated from", nrow(ramsar_global), "features to", nrow(ramsar_global_consolidated), "unique Ramsar sites."))
 message("\n--- Details of first 5 CONSOLIDATED Ramsar sites (if available): ---")
-print(head(ramsar_global_consolidated %>% select(ramsar_site_id, officialna, country_en), 5))
+print(head(ramsar_global_consolidated |> select(ramsar_site_id, officialna, country_en), 5))
 
 # --- 5. Process each individual Ramsar site ---
 message("\nStarting WKT conversion for individual Ramsar sites...")
@@ -206,8 +206,8 @@ if (actual_wkt_files_on_disk_count == total_expected_wkt_files) {
 
   if (length(missing_ramsar_ids) > 0) {
     message("\n--- Details of Missing WKT File(s) ---")
-    missing_site_details <- ramsar_global %>%
-      filter(ramsar_site_id %in% missing_ramsar_ids) %>%
+    missing_site_details <- ramsar_global |>
+      filter(ramsar_site_id %in% missing_ramsar_ids) |>
       select(ramsar_site_id, officialna, country_en) # Select relevant columns for identification
 
     if (nrow(missing_site_details) > 0) {
