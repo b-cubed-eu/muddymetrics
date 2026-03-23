@@ -18,7 +18,6 @@ Imports:
     readr,
     ape,
     tibble,
-    magrittr,
     scales,
     rlang,
     rgbif,
