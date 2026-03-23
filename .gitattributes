@@ -1,0 +1,2 @@
+docs/**/*.png£
+git[[:space:]]lfs[[:space:]]track[[:space:]]docs/**/*.png filter=lfs diff=lfs merge=lfs -text
