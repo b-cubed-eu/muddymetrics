@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Generate static HTML gallery from pre-generated PNG plots
+# Generate static HTML gallery from PNG plots
 
 output_base <- "output/ramsar_metric_results_100m"
 docs_dir <- "docs"
@@ -16,17 +16,22 @@ continent_names <- setNames(
   continents
 )
 
-get_site_name <- function(filename) {
-  sub("_data.*$", "", sub(".*site_[0-9]+_", "", filename))
-}
-
 get_plot_type <- function(filename) {
   if (grepl("obs_richness", filename)) return("Observed Richness")
   if (grepl("cum_richness", filename)) return("Cumulative Richness")
-  if (grepl("total_occ_ts", filename)) return("Total Occurrences (Time Series)")
-  if (grepl("total_occ_map", filename)) return("Total Occurrences (Map)")
+  if (grepl("total_occ_ts", filename)) return("Total Occurrences")
+  if (grepl("total_occ_map", filename)) return("Total Occurrences Map")
   if (grepl("overall_density", filename)) return("Overall Density")
+  if (grepl("completeness", filename)) return("Completeness")
   return("Other")
+}
+
+extract_site_id <- function(filename) {
+  # Extract site_XXXX from filename like site_1001_Cromarty_Firth_total_occ_ts.png
+  if (grepl("^site_[0-9]+_", filename)) {
+    return(sub("^(site_[0-9]+)_.*", "\\1", filename))
+  }
+  return(NULL)
 }
 
 html_header <- function(title) {
@@ -84,13 +89,31 @@ html_footer <- function() {
 '
 }
 
-cat("Generating index page...\n")
+cat("Generating static gallery...\n")
 
+# Generate index
+total_sites <- 0
+for (continent in continents) {
+  continent_dir <- file.path(output_base, continent)
+  if (!dir.exists(continent_dir)) next
+  countries <- list.files(continent_dir)
+  for (country in countries) {
+    country_dir <- file.path(continent_dir, country)
+    if (!dir.exists(country_dir)) next
+    png_files <- list.files(country_dir, pattern = "\\.png$")
+    site_ids <- unique(sapply(png_files, extract_site_id))
+    site_ids <- site_ids[!is.null(site_ids)]
+    total_sites <- total_sites + length(site_ids)
+  }
+}
+
+cat("Total sites:", total_sites, "\n")
+
+# Generate index page
 index_content <- html_header("Muddymetrics - Ramsar Site Biodiversity Dashboard")
-
 index_content <- paste0(index_content, '
   <header>
-    <h1>🧪 Muddymetrics</h1>
+    <h1>Muddymetrics</h1>
     <p>Ramsar Site Biodiversity Indicators</p>
   </header>
   <nav>
@@ -98,25 +121,7 @@ index_content <- paste0(index_content, '
   </nav>
   <main>
     <div class="stats">
-      <div class="stats-grid>
-')
-
-total_sites <- 0
-for (continent in continents) {
-  continent_dir <- file.path(output_base, continent)
-  if (!dir.exists(continent_dir)) next
-  
-  countries <- list.files(continent_dir)
-  for (country in countries) {
-    country_dir <- file.path(continent_dir, country)
-    if (!dir.exists(country_dir)) next
-    files <- list.files(country_dir, pattern = "\\.png$")
-    sites <- unique(gsub("_.*$", "", gsub("site_[0-9]+_", "", files)))
-    total_sites <- total_sites + length(sites)
-  }
-}
-
-index_content <- paste0(index_content, '
+      <div class="stats-grid">
         <div class="stat">
           <div class="number">', total_sites, '</div>
           <div class="label">Sites</div>
@@ -125,13 +130,8 @@ index_content <- paste0(index_content, '
           <div class="number">7</div>
           <div class="label">Continents</div>
         </div>
-        <div class="stat">
-          <div class="number">~2000+</div>
-          <div class="label">Plots</div>
-        </div>
       </div>
     </div>
-    
     <h2>Browse by Continent</h2>
     <div class="grid">
 ')
@@ -139,10 +139,8 @@ index_content <- paste0(index_content, '
 for (continent in continents) {
   continent_dir <- file.path(output_base, continent)
   if (!dir.exists(continent_dir)) next
-  
   countries <- list.files(continent_dir)
   n_countries <- length(countries)
-  
   index_content <- paste0(index_content, '
       <div class="card">
         <a href="', continent, '/index.html">
@@ -159,11 +157,9 @@ index_content <- paste0(index_content, '
     </div>
   </main>
 ', html_footer())
-
 writeLines(index_content, file.path(docs_dir, "index.html"))
 
-cat("Generating continent pages...\n")
-
+# Process continents
 for (continent in continents) {
   continent_dir <- file.path(output_base, continent)
   if (!dir.exists(continent_dir)) next
@@ -175,74 +171,75 @@ for (continent in continents) {
   
   countries <- sort(list.files(continent_dir))
   
-  continent_content <- html_header(paste0(continent_names[continent], " - Muddymetrics"))
-  continent_content <- paste0(continent_content, '
+  # Continent index
+  cont_content <- html_header(paste0(continent_names[continent], " - Muddymetrics"))
+  cont_content <- paste0(cont_content, '
   <header>
     <h1>', continent_names[continent], '</h1>
   </header>
   <nav>
-    <a href="../index.html">← Home</a>
+    <a href="../index.html">Home</a>
   </nav>
   <main>
     <div class="breadcrumb">
       <a href="../index.html">Home</a> / ', continent_names[continent], '
     </div>
-    <h2>Countries in ', continent_names[continent], '</h2>
+    <h2>Countries</h2>
     <div class="grid">
-  ')
+')
   
   for (country in countries) {
     country_dir <- file.path(continent_dir, country)
     if (!dir.exists(country_dir)) next
-    
     png_files <- list.files(country_dir, pattern = "\\.png$")
-    n_plots <- length(png_files)
+    if (length(png_files) == 0) next
     
-    if (n_plots == 0) next
-    
-    continent_content <- paste0(continent_content, '
+    # URL encode country name for links (not folder names)
+    country_link <- URLencode(country)
+    cont_content <- paste0(cont_content, '
       <div class="card">
         <a href="', country, '/index.html">
           <div class="card-content">
             <h3>', country, '</h3>
-            <span class="type">', n_plots, ' plots</span>
+            <span class="type">', length(png_files), ' plots</span>
           </div>
         </a>
       </div>
     ')
   }
   
-  continent_content <- paste0(continent_content, '
+  cont_content <- paste0(cont_content, '
     </div>
   </main>
   ', html_footer())
+  writeLines(cont_content, file.path(continent_html_dir, "index.html"))
   
-  writeLines(continent_content, file.path(continent_html_dir, "index.html"))
-  
-  cat("  ", continent, ":", length(countries), "countries\n")
-  
+  # Countries
   for (country in countries) {
     country_dir <- file.path(continent_dir, country)
     if (!dir.exists(country_dir)) next
+    png_files <- list.files(country_dir, pattern = "\\.png$")
+    if (length(png_files) == 0) next
     
     country_html_dir <- file.path(continent_html_dir, country)
     if (!dir.exists(country_html_dir)) {
       dir.create(country_html_dir, recursive = TRUE)
     }
     
-    png_files <- list.files(country_dir, pattern = "\\.png$")
+    # Get unique sites
+    site_ids <- unique(sapply(png_files, extract_site_id))
+    site_ids <- site_ids[!is.null(site_ids)]
     
-    if (length(png_files) == 0) next
-    
-    country_content <- html_header(paste0(country, " - ", continent_names[continent], " - Muddymetrics"))
+    # Country index
+    country_content <- html_header(paste0(country, " - Muddymetrics"))
     country_content <- paste0(country_content, '
   <header>
     <h1>', country, '</h1>
     <p>', continent_names[continent], '</p>
   </header>
   <nav>
-    <a href="../index.html">← ', continent_names[continent], '</a>
-    <a href="../../index.html">← Home</a>
+    <a href="../index.html">', continent_names[continent], '</a>
+    <a href="../../index.html">Home</a>
   </nav>
   <main>
     <div class="breadcrumb">
@@ -250,18 +247,16 @@ for (continent in continents) {
       <a href="../index.html">', continent_names[continent], '</a> / 
       ', country, '
     </div>
-    <h2>Site Plots in ', country, '</h2>
+    <h2>Sites</h2>
     <div class="grid">
-  ')
-    
-    site_ids <- unique(gsub("_data.*$", "", sub("site_([0-9]+)_.*", "site_\\1", png_files)))
+')
     
     for (site_id in site_ids) {
       site_pngs <- grep(paste0("^", site_id, "_"), png_files, value = TRUE)
-      
       if (length(site_pngs) == 0) next
       
-      site_name <- gsub("_", " ", sub("site_[0-9]+_", "", site_id))
+      site_name <- sub(paste0(site_id, "_"), "", site_id)
+      site_name <- gsub("_", " ", site_name)
       
       country_content <- paste0(country_content, '
       <div class="card">
@@ -272,19 +267,18 @@ for (continent in continents) {
           </div>
         </a>
       </div>
-      ')
+')
     }
     
     country_content <- paste0(country_content, '
     </div>
   </main>
   ', html_footer())
-    
     writeLines(country_content, file.path(country_html_dir, "index.html"))
     
+    # Site pages
     for (site_id in site_ids) {
       site_pngs <- grep(paste0("^", site_id, "_"), png_files, value = TRUE)
-      
       if (length(site_pngs) == 0) next
       
       site_html_dir <- file.path(country_html_dir, site_id)
@@ -292,55 +286,62 @@ for (continent in continents) {
         dir.create(site_html_dir, recursive = TRUE)
       }
       
-      site_name <- gsub("_", " ", sub("site_[0-9]+_", "", site_id))
+      # Copy PNG files
+      for (png in site_pngs) {
+        from_path <- file.path(country_dir, png)
+        to_path <- file.path(site_html_dir, png)
+        if (!file.exists(to_path)) {
+          file.copy(from_path, to_path)
+        }
+      }
       
-      site_content <- html_header(paste0(site_name, " - ", country, " - Muddymetrics"))
+      site_name <- sub(paste0(site_id, "_"), "", site_id)
+      site_name <- gsub("_", " ", site_name)
+      
+      site_content <- html_header(paste0(site_name, " - ", country))
       site_content <- paste0(site_content, '
   <header>
     <h1>', site_name, '</h1>
     <p>', country, ', ', continent_names[continent], '</p>
   </header>
   <nav>
-    <a href="../index.html">← ', country, '</a>
-    <a href="../../index.html">← Home</a>
+    <a href="index.html">', country, '</a>
+    <a href="../../index.html">Home</a>
   </nav>
   <main>
     <div class="breadcrumb">
       <a href="../../index.html">Home</a> / 
-      <a href="../index.html">', continent_names[continent], '</a> / 
-      <a href="../', country, '/index.html">', country, '</a> / 
+      <a href="index.html">', continent_names[continent], '</a> / 
+      <a href="index.html">', country, '</a> / 
       ', site_name, '
     </div>
-    <h2>Plots for ', site_name, '</h2>
+    <h2>Plots</h2>
     <div class="grid">
-  ')
+')
       
       for (png in sort(site_pngs)) {
         plot_type <- get_plot_type(png)
-        
         site_content <- paste0(site_content, '
       <div class="card">
-        <a href="../', png, '" target="_blank">
+        <a href="', png, '" target="_blank">
+          <img src="', png, '" alt="', plot_type, '">
           <div class="card-content">
             <h3>', plot_type, '</h3>
-            <span class="type">View Plot</span>
           </div>
         </a>
       </div>
-      ')
+')
       }
       
       site_content <- paste0(site_content, '
     </div>
   </main>
   ', html_footer())
-      
       writeLines(site_content, file.path(site_html_dir, "index.html"))
     }
   }
+  
+  cat("  ", continent, ":", length(countries), "countries\n")
 }
 
-cat("\n✓ Gallery generated in docs/\n")
-cat("To preview locally: serve the docs/ folder\n")
-cat("To deployHub and enable Pages\n")
-: push to Git
+cat("\nDone! Serve with: cd docs && python -m http.server 8000\n")
