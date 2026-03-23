@@ -135,10 +135,10 @@ calculate_sac_slope <- function(cube,
     ))
   }
 
-  lm_result <- lm(richness[valid_idx] ~ sites[valid_idx])
+  lm_result <- stats::lm(richness[valid_idx] ~ sites[valid_idx])
 
-  slope <- coef(lm_result)[2]
-  intercept <- coef(lm_result)[1]
+  slope <- stats::coef(lm_result)[2]
+  intercept <- stats::coef(lm_result)[1]
   r_squared <- summary(lm_result)$r.squared
 
   return(list(
