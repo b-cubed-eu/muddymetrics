@@ -134,7 +134,7 @@ generate_summary_report <- function(summary_data, output_path) {
 
 | Metric | Mean | Median | Min | Max |
 |--------|------|--------|-----|-----|
-| Density (records/km²) | `r mean(summary_data$density_km2, na.rm = TRUE)` | `r median(summary_data$density_km2, na.rm = TRUE)` | `r min(summary_data$density_km2, na.rm = TRUE)` | `r max(summary_data$density_km2, na.rm = TRUE)` |
+| Density (records/km^2) | `r mean(summary_data$density_km2, na.rm = TRUE)` | `r median(summary_data$density_km2, na.rm = TRUE)` | `r min(summary_data$density_km2, na.rm = TRUE)` | `r max(summary_data$density_km2, na.rm = TRUE)` |
 
 ## By Continent
 
