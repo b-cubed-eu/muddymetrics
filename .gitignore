@@ -2,7 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
-*.png
 *.zip
 inst/
 output/
+
+# But allow the docs folder (for GitHub Pages)
+!docs/
+!docs/**/*.png
