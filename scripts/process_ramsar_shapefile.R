@@ -1,7 +1,7 @@
 # Load global ramsar shapefile
 ramsar_global <- sf::st_read("inst/extdata/Ramsar_boundaries/features_publishedPolygon.shp")
 
-ramsar_global %>% # fix bad country names
+ramsar_global |> # fix bad country names
   dplyr::mutate(country_en = dplyr::case_when(
     country_en == "C\xf4te d'Ivoire" ~ "Cote dIvoire",
     country_en == "T\xfcrkiye" ~ "Turkey",
