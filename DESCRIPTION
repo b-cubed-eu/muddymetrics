@@ -16,7 +16,11 @@ Imports:
     tools,
     vegan,
     readr,
-    ape
+    ape,
+    tibble,
+    magrittr,
+    scales,
+    rlang
 Suggests: 
     testthat (>= 3.0.0),
     covr,
