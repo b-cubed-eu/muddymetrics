@@ -21,7 +21,9 @@ Imports:
     magrittr,
     scales,
     rlang,
-    rgbif
+    rgbif,
+    purrr,
+    units
 Suggests: 
     testthat (>= 3.0.0),
     covr,
