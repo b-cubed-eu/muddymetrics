@@ -114,7 +114,7 @@ assess_indicator_robustness <- function(cube,
   t_star <- bootstrap_df$diversity_val
   t0 <- original_estimate
   bias_est <- mean(t_star) - t0
-  bootstrap_se <- sd(t_star)
+  bootstrap_se <- stats::sd(t_star)
 
   return(list(
     original_estimate = original_estimate,
