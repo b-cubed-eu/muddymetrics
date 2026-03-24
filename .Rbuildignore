@@ -13,3 +13,5 @@
 ^codemeta\.json$
 ^_pkgdown\.yaml$
 ^CODE_OF_CONDUCT\.md$
+^docs$
+^dashboard$
