@@ -10,6 +10,7 @@ calc_ramsar_indicator(
   maindir,
   shapefiledir,
   continent,
+  ne_scale = "large",
   plot_args = list(),
   ...
 )
@@ -27,10 +28,13 @@ subdirectories with GBIF data cubes.}
 
 \item{continent}{Character. The continent name used for b3gbi internal mapping.}
 
-\item{plot_args}{List. Additional arguments passed to the plot function
+\item{ne_scale}{Character. The scale of Natural Earth data to use ("small", "medium", "large").
+Defaults to "large" for better spatial accuracy. This requires the rnaturalearthhires package.}
+
+\item{plot_args}{List. Additional arguments passed to the plotting functions.
 (e.g., \code{list(smoothed_trend = FALSE)}).}
 
-\item{...}{Additional arguments passed to \code{b3gbi::compute_indicator_workflow}.}
+\item{...}{Additional arguments passed to \code{b3gbi::compute_indicator_workflow}}
 }
 \value{
 A list containing two nested lists: \code{mean} (mean indicator values

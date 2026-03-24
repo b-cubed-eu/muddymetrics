@@ -12,7 +12,9 @@
 #' @param maindir Character. Path to the base output directory.
 #' @param shapefiledir Character. Path to the base directory containing site WKT files.
 #' @param continent Character. The continent name used for b3gbi internal mapping.
-#' @param plot_args List. Additional arguments passed to the plot function
+#' @param ne_scale Character. The scale of Natural Earth data to use ("small", "medium", "large").
+#'   Defaults to "large" for better spatial accuracy. This requires the rnaturalearthhires package.
+#' @param plot_args List. Additional arguments passed to the plotting functions.
 #'   (e.g., \code{list(smoothed_trend = FALSE)}).
 #' @param ... Additional arguments passed to \code{b3gbi::compute_indicator_workflow}.
 #'
@@ -29,6 +31,7 @@ calc_ramsar_indicator <- function(indicator,
                                   maindir,
                                   shapefiledir,
                                   continent,
+                                  ne_scale = "large",
                                   plot_args = list(),
                                   ...) {
 
@@ -46,12 +49,12 @@ calc_ramsar_indicator <- function(indicator,
   countrylist <- list.files(inputdir)
   mean_list <- vector("list", length(countrylist))
   values_list <- vector("list", length(countrylist))
-  
+
   for (i in seq_along(countrylist)) {
     country_name <- countrylist[i]
     country_input_dir <- file.path(inputdir, country_name)
     country_output_dir <- file.path(maindir, country_name)
-    
+
     if (!dir.exists(country_output_dir)) {
       dir.create(country_output_dir, recursive = TRUE)
       message(paste0("Created ", country_name, " output directory: ", country_output_dir))
@@ -60,7 +63,7 @@ calc_ramsar_indicator <- function(indicator,
     sitelist <- list.files(country_input_dir, pattern = "\\.csv$")
     mean_temp <- vector("list", length(sitelist))
     values_temp <- vector("list", length(sitelist))
-    
+
     for (j in seq_along(sitelist)) {
       tryCatch({
         # Robustly extract site name by removing '_data' suffix and extension
@@ -77,7 +80,7 @@ calc_ramsar_indicator <- function(indicator,
           type = indy,
           dim_type = type,
           shapefile_path = shapefilepath,
-          ne_scale = "large",
+          ne_scale = ne_scale,
           region = continent,
           include_water = TRUE,
           shapefile_crs = 4326,
@@ -122,7 +125,7 @@ calc_ramsar_indicator <- function(indicator,
         }
       })
     }
-    
+
     names(mean_temp) <- sitelist
     names(values_temp) <- sitelist
     mean_list[[i]] <- mean_temp
