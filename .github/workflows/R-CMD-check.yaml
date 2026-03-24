@@ -66,4 +66,4 @@ jobs:
 
       - name: Test coverage
         run: |
-          Rscript -e 'cv <- covr::package_coverage(); print(cv)
+          Rscript -e 'cv <- covr::package_coverage(); print(cv)'
