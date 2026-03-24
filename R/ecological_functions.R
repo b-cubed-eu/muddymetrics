@@ -289,9 +289,9 @@ calculate_ecological_metrics_batch <- function(inputdir,
 
         cubepath <- file.path(country_input_dir, site_file)
 
-        alpha_div <- calculate_alpha_diversity(cubepath, shapefile_path)
-        evenness <- calculate_evenness(cubepath, shapefile_path)
-        rarity <- calculate_rarity_metrics(cubepath, shapefile_path = shapefilepath)
+        alpha_div <- calculate_alpha_diversity(cubepath, shapefilepath)
+        evenness <- calculate_evenness(cubepath, shapefilepath)
+        rarity <- calculate_rarity_metrics(cubepath, shapefilepath)
 
         results <- rbind(results, data.frame(
           site_id = site_id,
