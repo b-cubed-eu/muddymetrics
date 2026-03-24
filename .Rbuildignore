@@ -15,3 +15,4 @@
 ^CODE_OF_CONDUCT\.md$
 ^docs$
 ^dashboard$
+^inst\extdata\test_data$
