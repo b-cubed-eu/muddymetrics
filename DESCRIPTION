@@ -36,6 +36,7 @@ Suggests:
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Remotes:
+    github::b-cubed-eu/b3gbi,
     github::b-cubed-eu/dubicube,
     github::b-cubed-eu/pdindicatoR,
     github::b-cubed-eu/impIndicator
