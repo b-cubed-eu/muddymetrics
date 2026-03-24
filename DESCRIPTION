@@ -39,7 +39,7 @@ Remotes:
     github::b-cubed-eu/b3gbi,
     github::b-cubed-eu/dubicube,
     github::b-cubed-eu/pdindicatoR,
-    github::b-cubed-eu/impIndicator
+    github::b-cubed-eu/impIndicator,
     github::ropensci/rnaturalearthhires
 BugReports: https://github.com/b-cubed-eu/muddymetrics/issues
 Funding: This project receives funding from the European Union's Horizon Europe 
