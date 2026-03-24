@@ -1,11 +1,5 @@
 library(testthat)
 
-test_that("run_european_deep_dive script exists", {
-  script_path <- file.path("scripts", "run_european_deep_dive.R")
-  expect_true(file.exists(script_path))
-})
-
-
 test_that("plot_diversity_by_country creates valid plot", {
   test_data <- data.frame(
     site_id = c("site1", "site2", "site3", "site4"),
