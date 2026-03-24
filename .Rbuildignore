@@ -4,6 +4,8 @@
 ^scripts$
 ^main\.R$
 ^README\.html$
+^README\.Rmd$
+^LICENSE\.md$
 ^\.github$
 ^output$
 .*\.zip$
