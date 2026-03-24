@@ -21,7 +21,8 @@ test_that("calc_ramsar_indicator processes a real site flow", {
     maindir = tmp_main,
     shapefiledir = file.path(test_base, "wkt"),
     continent = "Asia",
-    plot_args = list(smoothed_trend = FALSE)
+    plot_args = list(smoothed_trend = FALSE,
+                     ne_scale = "medium")
   )
 
   # Validate results
