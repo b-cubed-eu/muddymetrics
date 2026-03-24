@@ -1,0 +1,29 @@
+url: https://b-cubed-eu.github.io/muddymetrics/
+
+template:
+  bootstrap: 5
+  bootswatch: flatly
+
+navbar:
+  structure:
+    left:  [intro, reference, articles, news]
+    right: [github]
+
+reference:
+  - title: Core Indicators
+    desc: Functions for calculating biodiversity metrics.
+    contents:
+      - calculate_ramsar_metric
+      - calc_ramsar_indicator
+  - title: Data Ingestion
+    desc: Functions for GBIF API interaction and file management.
+    contents:
+      - get_gbif_predicates
+      - download_robust
+      - check_gbif_credentials
+  - title: Utils
+    desc: Internal helpers.
+    contents:
+      - save_download_key
+      - load_download_key
+      - save_ramsar_plot

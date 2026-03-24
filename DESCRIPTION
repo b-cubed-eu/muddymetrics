@@ -1,0 +1,46 @@
+Package: muddymetrics
+Title: Ramsar Biodiversity Indicator Pipeline
+Version: 0.1.0
+Authors@R: person("Shawn", "Dove", email = "shawn.dove@allzool.bio.uni-giessen.de", role = c("aut", "cre"))
+Description: Automated pipeline for calculating biodiversity indicators for Ramsar sites using GBIF data cubes and b3gbi.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.3
+Imports: 
+    b3gbi,
+    sf,
+    dplyr,
+    ggplot2,
+    utils,
+    tools,
+    vegan,
+    readr,
+    ape,
+    tibble,
+    scales,
+    rlang,
+    rgbif,
+    purrr,
+    units
+Suggests: 
+    testthat (>= 3.0.0),
+    covr,
+    knitr,
+    rmarkdown,
+    pdindicatoR,
+    impIndicator,
+    dubicube,
+    rnaturalearthdata,
+    rnaturalearthhires
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Remotes:
+    github::b-cubed-eu/b3gbi,
+    github::b-cubed-eu/dubicube,
+    github::b-cubed-eu/pdindicatoR,
+    github::b-cubed-eu/impIndicator,
+    github::ropensci/rnaturalearthhires
+BugReports: https://github.com/b-cubed-eu/muddymetrics/issues
+Funding: This project receives funding from the European Union's Horizon Europe 
+    Research and Innovation Programme (ID No 101059592)

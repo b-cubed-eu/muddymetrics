@@ -1,0 +1,32 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "identifier": "muddymetrics",
+  "description": "Automated pipeline for calculating biodiversity indicators for Ramsar sites using GBIF data cubes and b3gbi.",
+  "name": "muddymetrics: Ramsar Biodiversity Indicator Pipeline",
+  "codeRepository": "https://github.com/b-cubed-eu/muddymetrics",
+  "issueTracker": "https://github.com/b-cubed-eu/muddymetrics/issues",
+  "license": "https://spdx.org/licenses/MIT",
+  "version": "0.1.0",
+  "programmingLanguage": {
+    "@type": "ComputerLanguage",
+    "name": "R",
+    "url": "https://www.r-project.org"
+  },
+  "author": [
+    {
+      "@type": "Person",
+      "givenName": "Shawn",
+      "familyName": "Dove",
+      "email": "shawn.dove@allzool.bio.uni-giessen.de"
+    }
+  ],
+  "maintainer": [
+    {
+      "@type": "Person",
+      "givenName": "Shawn",
+      "familyName": "Dove",
+      "email": "shawn.dove@allzool.bio.uni-giessen.de"
+    }
+  ]
+}
