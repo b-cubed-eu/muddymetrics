@@ -181,32 +181,32 @@ perform_data_gap_analysis <- function(summary_data) {
   data_poor <- sum(summary_data$data_class == "Data-Poor", na.rm = TRUE)
 
   by_continent <- summary_data |>
-    dplyr::group_by(continent) |>
+    dplyr::group_by(.data$continent) |>
     dplyr::summarise(
       total = dplyr::n(),
-      data_rich = sum(data_class == "Data-Rich", na.rm = TRUE),
-      data_poor = sum(data_class == "Data-Poor", na.rm = TRUE),
+      data_rich = sum(.data$data_class == "Data-Rich", na.rm = TRUE),
+      data_poor = sum(.data$data_class == "Data-Poor", na.rm = TRUE),
       .groups = "drop"
     ) |>
-    dplyr::mutate(pct_data_rich = data_rich / total * 100)
+    dplyr::mutate(pct_data_rich = data_rich / .data$total * 100)
 
   by_country <- summary_data |>
-    dplyr::group_by(country) |>
+    dplyr::group_by(.data$country) |>
     dplyr::summarise(
       total = dplyr::n(),
-      data_rich = sum(data_class == "Data-Rich", na.rm = TRUE),
-      data_poor = sum(data_class == "Data-Poor", na.rm = TRUE),
+      data_rich = sum(.data$data_class == "Data-Rich", na.rm = TRUE),
+      data_poor = sum(.data$data_class == "Data-Poor", na.rm = TRUE),
       .groups = "drop"
     ) |>
-    dplyr::mutate(pct_data_rich = data_rich / total * 100) |>
-    dplyr::arrange(dplyr::desc(pct_data_rich))
+    dplyr::mutate(pct_data_rich = data_rich / .data$total * 100) |>
+    dplyr::arrange(dplyr::desc(.data$pct_data_rich))
 
   threshold_pass <- summary_data |>
     dplyr::summarise(
-      density_pass = sum(passes_density, na.rm = TRUE),
-      chao2_pass = sum(passes_chao2, na.rm = TRUE),
-      slope_pass = sum(passes_slope, na.rm = TRUE),
-      all_pass = sum(passes_all_thresholds, na.rm = TRUE)
+      density_pass = sum(.data$passes_density, na.rm = TRUE),
+      chao2_pass = sum(.data$passes_chao2, na.rm = TRUE),
+      slope_pass = sum(.data$passes_slope, na.rm = TRUE),
+      all_pass = sum(.data$passes_all_thresholds, na.rm = TRUE)
     )
 
   return(list(
