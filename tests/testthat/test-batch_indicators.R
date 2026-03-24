@@ -6,7 +6,7 @@ test_that("calc_ramsar_indicator processes a real site flow", {
   test_base <- system.file("extdata/test_data", package = "muddymetrics")
 
   # Fallback for local development if system.file fails
-  if (test_base == "") test_base <- "../../inst/extdata/test_data"
+  if (test_base == "") test_base <- "inst/extdata/test_data"
 
   skip_if(!dir.exists(test_base), "Test data directory not found")
 
