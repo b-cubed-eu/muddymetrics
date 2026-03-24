@@ -30,7 +30,9 @@ Suggests:
     rmarkdown,
     pdindicatoR,
     impIndicator,
-    dubicube
+    dubicube,
+    rnaturalearthdata,
+    rnaturalearthhires
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Remotes:
