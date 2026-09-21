@@ -1,3 +1,13 @@
+# muddymetrics 0.2.0
+
+* Added the analysis workflow for the Ramsar case study (B3 deliverable D6.1) in `scripts/`,
+  with run order and input data documented in `scripts/README.md`.
+* `calculate_chao2()` now estimates Chao2 from species incidence across occupied grid cells,
+  and returns `NA` when fewer than two cells are occupied.
+* Removed superseded download and processing scripts and `main.R`.
+* Rewrote the README to describe the analysis workflow, requirements and input data.
+* Added `.gitattributes` to normalise line endings.
+
 # muddymetrics 0.1.0
 
 * Initial release.
