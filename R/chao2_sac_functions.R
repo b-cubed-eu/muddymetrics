@@ -27,10 +27,19 @@ calculate_chao2 <- function(cube, shapefile_path = NULL) {
   }
 
   species_col <- cube$specieskey
+  
+  # Select sampling unit column: prefer mgrscellcode, fallback to geometry or occurrenceId
+  cell_col <- if ("mgrscellcode" %in% names(cube)) {
+    cube$mgrscellcode
+  } else if ("geometry" %in% names(cube)) {
+    cube$geometry
+  } else if ("occurrenceId" %in% names(cube)) {
+    cube$occurrenceId
+  } else {
+    NULL
+  }
 
-  valid_species <- species_col[!is.na(species_col)]
-
-  if (length(valid_species) == 0) {
+  if (is.null(cell_col) || is.null(species_col)) {
     return(list(
       chao2 = NA_real_,
       observed = 0,
@@ -40,29 +49,60 @@ calculate_chao2 <- function(cube, shapefile_path = NULL) {
     ))
   }
 
-  sample_counts <- table(valid_species)
-
-  f1 <- sum(sample_counts == 1)
-  f2 <- sum(sample_counts == 2)
+  # Filter out rows with NA or empty sampling units or specieskeys
+  valid_idx <- !is.na(species_col) & species_col != "" & !is.na(cell_col) & cell_col != ""
+  valid_species <- species_col[valid_idx]
+  valid_cells <- cell_col[valid_idx]
 
   S_obs <- length(unique(valid_species))
+  T_val <- length(unique(valid_cells))
 
-  if (f2 > 0) {
-    chao2_est <- S_obs + (f1^2) / (2 * f2)
-  } else if (f1 > 0) {
-    chao2_est <- S_obs + (f1 * (f1 - 1)) / 2
-  } else {
-    chao2_est <- S_obs
+  # Note: sampling unit is grid cells; if a site has < 2 occupied cells, Chao2 is undefined
+  if (S_obs == 0 || T_val < 2) {
+    return(list(
+      chao2 = NA_real_,
+      observed = S_obs,
+      completeness = NA_real_,
+      f1 = 0,
+      f2 = 0
+    ))
   }
 
-  completeness <- if (chao2_est > 0) S_obs / chao2_est else NA_real_
+  # Build species x grid-cell incidence (presence/absence) matrix
+  comm <- table(valid_cells, valid_species)
+  comm <- as.matrix(comm)
+  comm[comm > 0] <- 1
+
+  # Use vegan::specpool for vetted Chao2 implementation
+  res <- tryCatch({
+    vegan::specpool(comm)
+  }, error = function(e) NULL)
+
+  if (is.null(res) || !("chao" %in% names(res)) || length(res$chao) == 0) {
+    return(list(
+      chao2 = NA_real_,
+      observed = S_obs,
+      completeness = NA_real_,
+      f1 = 0,
+      f2 = 0
+    ))
+  }
+
+  chao2_est <- res$chao[1]
+  
+  # Calculate Q1 and Q2 from the matrix
+  cell_counts <- colSums(comm)
+  Q1 <- sum(cell_counts == 1)
+  Q2 <- sum(cell_counts == 2)
+
+  completeness <- if (!is.na(chao2_est) && chao2_est > 0) S_obs / chao2_est else NA_real_
 
   return(list(
     chao2 = chao2_est,
     observed = S_obs,
     completeness = completeness,
-    f1 = f1,
-    f2 = f2
+    f1 = Q1,
+    f2 = Q2
   ))
 }
 

@@ -6,3 +6,12 @@
 *.zip
 inst/
 output/
+
+_local_data/
+report_figures/embed/
+__pycache__/
+*.pyc
+.claude/
+b3alien_handover/
+*.docx
+report_figures/
