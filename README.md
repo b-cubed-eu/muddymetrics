@@ -1,5 +1,12 @@
 # muddymetrics: Ramsar Biodiversity Indicator Pipeline
 
+[![repo
+status](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#wip)
+[![Release](https://img.shields.io/github/release/b-cubed-eu/muddymetrics.svg?include_prereleases)](https://github.com/b-cubed-eu/muddymetrics/releases)
+[![R-CMD-check](https://github.com/b-cubed-eu/muddymetrics/actions/workflows/R-CMD-check.yaml/badge.svg?branch=main)](https://github.com/b-cubed-eu/muddymetrics/actions/workflows/R-CMD-check.yaml)
+[![codecov](https://codecov.io/gh/b-cubed-eu/muddymetrics/branch/main/graph/badge.svg)](https://app.codecov.io/gh/b-cubed-eu/muddymetrics/)
+
+
 Evaluate Ramsar policy monitoring using open GBIF data and provide a global dashboard of biodiversity trends and indicators (richness, occupancy, evenness, rarity) for researchers and policymakers.
 
 ## Project Structure

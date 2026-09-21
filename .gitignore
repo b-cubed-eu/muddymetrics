@@ -4,14 +4,16 @@
 .Ruserdata
 *.png
 *.zip
+*.docx
 inst/
 output/
-
+report_figures/
 _local_data/
-report_figures/embed/
+b3alien_handover/
+.claude/
 __pycache__/
 *.pyc
-.claude/
-b3alien_handover/
-*.docx
-report_figures/
+
+# Allow the docs folder (GitHub Pages gallery)
+!docs/
+!docs/**/*.png
