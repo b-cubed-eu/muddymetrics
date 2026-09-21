@@ -12,28 +12,14 @@ Evaluate Ramsar policy monitoring using open GBIF data and provide a global dash
 ## Project Structure
 
 - `R/`: Modular function definitions (Download, Indicator, Visualization, Utils).
-- `scripts/`: Production scripts for data acquisition and heavy processing.
+- `scripts/`: Analysis workflow for the Ramsar case study. See `scripts/README.md` for run order.
 - `inst/extdata/`: Raw data, including Ramsar boundaries and GBIF cubes.
 - `output/`: Generated results, including plots (.png) and processed data (.rds/.RData).
 - `tests/`: Unit tests using the `testthat` framework.
-- `main.R`: Master workflow script to orchestrate the pipeline.
 
-## Data Ingestion Workflows
+## Data
 
-This project supports two primary ways to obtain GBIF data:
-
-### 1. The "Continental" Workflow (Recommended for Global Analysis)
-Use this for processing thousands of sites efficiently.
-1.  **Download:** Run `scripts/download_continental_cubes.R`. This requests a massive 100m MGRS cube for an entire continent via the GBIF SQL API.
-    *   **Resumable:** If the download (which can be >100GB) is interrupted, simply restart the script. It uses system `curl` to resume the transfer exactly where it left off.
-    *   **Requirements:** ~200GB free disk space for ASIA or EUROPE.
-2.  **Cut:** Run `scripts/split_data_cubes.R` to intersect the continental cube with your Ramsar polygons locally.
-3.  **Analyze:** Use `calc_ramsar_indicator()` in `main.R`.
-
-### 2. The "Site-by-Site" Workflow (Fallback / Single Site)
-Use this for targeted updates or testing.
-*   **Scripts:** `scripts/download_gbif_ramsar_by_site.R`.
-*   **How:** Requests small, site-specific data cuts directly from GBIF.
+Continental GBIF occurrence cubes (100 m MGRS grid) were downloaded from the GBIF web interface and split into per-site cubes with `scripts/split_data_cubes_targeted.R` and `scripts/split_data_cubes_remaining.R`. Input data are not included in this repository; see `scripts/README.md` for the expected locations under `inst/extdata/`.
 
 ## Getting Started
 

@@ -7,7 +7,8 @@ Runner scripts call their workers by the relative path `scripts/<worker>.R`.
 
 ## Input data
 
-Input data are not included in this repository. Scripts expect GBIF occurrence cubes,
+Input data are not included in this repository. Continental GBIF occurrence cubes (100 m MGRS grid)
+were downloaded from the GBIF web interface. Scripts expect these cubes,
 Ramsar site boundaries, GRIIS checklists and GIDIAS impact records under `inst/extdata/`
 (GIDIAS at `inst/extdata/GIDIAS/GIDIAS_machine_read.csv`).
 
@@ -25,3 +26,5 @@ Ramsar site boundaries, GRIIS checklists and GIDIAS impact records under `inst/e
    `generate_composition_metric_invasive.R`
 
 Outputs are written to `output/` and `report_figures/`.
+
+`generate_static_gallery.R` builds the GitHub Pages gallery in `docs/` from per-site plots in `output/`.

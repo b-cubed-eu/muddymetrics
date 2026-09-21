@@ -24,12 +24,9 @@ library(muddymetrics)
 
 ## Core Workflows
 
-### 1. Data Ingestion (Continental)
+### 1. Data
 
-The most efficient way to process thousands of sites is the Continental workflow:
-
-1.  **Download:** Use `scripts/download_continental_cubes.R` to request a massive 100m MGRS cube for an entire continent.
-2.  **Cut:** Use `scripts/split_data_cubes.R` to intersect that cube with Ramsar polygons locally.
+Continental GBIF occurrence cubes (100 m MGRS grid) are downloaded from the GBIF web interface and split into per-site cubes with `scripts/split_data_cubes_targeted.R` and `scripts/split_data_cubes_remaining.R`.
 
 ### 2. Indicator Calculation
 
