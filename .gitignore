@@ -2,10 +2,18 @@
 .Rhistory
 .RData
 .Ruserdata
+*.png
 *.zip
+*.docx
 inst/
 output/
+report_figures/
+_local_data/
+b3alien_handover/
+.claude/
+__pycache__/
+*.pyc
 
-# But allow the docs folder (for GitHub Pages)
+# Allow the docs folder (GitHub Pages gallery)
 !docs/
 !docs/**/*.png
