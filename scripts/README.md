@@ -28,3 +28,13 @@ Ramsar site boundaries, GRIIS checklists and GIDIAS impact records under `inst/e
 Outputs are written to `output/` and `report_figures/`.
 
 `generate_static_gallery.R` builds the GitHub Pages gallery in `docs/` from per-site plots in `output/`.
+
+## Revised temporal and density criteria
+
+`run_temporal_only.R` (calling `worker_temporal_only.R`) recomputes the temporal-decoupling
+criterion from annual rather than cumulative series and records per-combination occurrence
+totals. `merge_and_regate_v2.R` then recomputes occurrence density from site area in km² and
+re-applies the five criteria. Run after step 2:
+
+    Rscript scripts/run_temporal_only.R
+    Rscript scripts/merge_and_regate_v2.R
