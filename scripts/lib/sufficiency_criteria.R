@@ -129,26 +129,40 @@ pooled_coverage <- function(st) {
 # Annual coverage (the "coverage deficit" criterion)
 # ---------------------------------------------------------------------------
 
-#' Per-year incidence sample coverage via iNEXT::DataInfo (as used by
-#' b3gbi::completeness_ts), with the per-year cell count and matrix size so
-#' that different inclusion rules can be applied afterwards.
+#' Incidence sample coverage from incidence frequencies, exactly as
+#' iNEXT::DataInfo(datatype = "incidence_raw") computes SC (Chao & Jost 2012,
+#' including iNEXT's rounding to 4 decimals). n_units = number of sampling
+#' units (cells); freq = number of cells occupied by each species.
+incidence_sc <- function(n_units, freq) {
+  freq <- freq[freq > 0]
+  U <- sum(freq); Q1 <- sum(freq == 1); Q2 <- sum(freq == 2)
+  if (U == 0) return(NA_real_)
+  Q0 <- if (Q2 == 0) (n_units - 1) / n_units * Q1 * (Q1 - 1) / 2 else (n_units - 1) / n_units * Q1^2 / 2 / Q2
+  A <- if (Q1 > 0) n_units * Q0 / (n_units * Q0 + Q1) else 1
+  round(1 - Q1 / U * A, 4)
+}
+
+#' Per-year incidence sample coverage (the quantity b3gbi::completeness_ts
+#' takes from iNEXT::DataInfo), with the per-year cell count and the size of
+#' the species x cell matrix so that different inclusion rules can be applied
+#' afterwards. Computed from incidence frequencies, so the dense species x
+#' cell matrix is never built (it can exceed memory at large sites).
 annual_coverage_table <- function(df, taxon_col = TAXON_COL) {
   v <- valid_incidence_rows(df, taxon_col)
-  years <- sort(unique(v$year))
+  pairs <- unique(data.frame(year = v$year, taxon = v$taxon, cell = v$mgrscellcode,
+                             stringsAsFactors = FALSE))
+  years <- sort(unique(pairs$year))
   out <- data.frame(year = years, n_cells = NA_integer_, n_species = NA_integer_,
-                    matrix_size = NA_integer_, sc = NA_real_)
+                    matrix_size = NA_real_, sc = NA_real_)
+  by_year <- split(pairs, pairs$year)
   for (i in seq_along(years)) {
-    y <- v[v$year == years[i], ]
-    pairs <- unique(y[, c("taxon", "mgrscellcode")])
-    m <- table(pairs$taxon, pairs$mgrscellcode)
-    m <- (unclass(m) > 0) * 1L
-    out$n_cells[i] <- ncol(m)
-    out$n_species[i] <- nrow(m)
-    out$matrix_size[i] <- length(m)
-    sc <- tryCatch(
-      suppressWarnings(iNEXT::DataInfo(list(a = m), datatype = "incidence_raw"))$SC,
-      error = function(e) NA_real_)
-    out$sc[i] <- as.numeric(sc)
+    y <- by_year[[as.character(years[i])]]
+    freq <- as.vector(table(y$taxon))
+    n_cells <- length(unique(y$cell))
+    out$n_cells[i] <- n_cells
+    out$n_species[i] <- length(freq)
+    out$matrix_size[i] <- as.numeric(length(freq)) * n_cells
+    out$sc[i] <- incidence_sc(n_cells, freq)
   }
   out
 }
@@ -237,10 +251,20 @@ precision_ratio <- function(df, area_km2) {
   total_w <- sum(w[!is.na(w) & w > 0])
   frac_missing <- if (total_w > 0) 1 - sum(w[has]) / total_w else NA_real_
   if (!any(has) || is.na(area_km2) || area_km2 <= 0) {
-    return(list(ratio = NA_real_, mean_area_km2 = NA_real_, frac_occ_missing = frac_missing))
+    return(list(ratio = NA_real_, mean_area_km2 = NA_real_, frac_occ_missing = frac_missing,
+                ratio_median = NA_real_, median_area_km2 = NA_real_))
   }
   mean_area <- sum(w[has] * pi * (u[has] / 1000)^2) / sum(w[has])
-  list(ratio = mean_area / area_km2, mean_area_km2 = mean_area, frac_occ_missing = frac_missing)
+  median_area <- pi * (weighted_median(u[has], w[has]) / 1000)^2
+  list(ratio = mean_area / area_km2, mean_area_km2 = mean_area, frac_occ_missing = frac_missing,
+       ratio_median = median_area / area_km2, median_area_km2 = median_area)
+}
+
+#' Lower weighted median: the smallest x at which the cumulative weight
+#' reaches half the total weight.
+weighted_median <- function(x, w) {
+  o <- order(x); x <- x[o]; w <- w[o]
+  x[which(cumsum(w) >= sum(w) / 2)[1]]
 }
 
 #' D6.1's definition, kept only as a regression check: unweighted mean radius
@@ -282,6 +306,9 @@ site_area_km2 <- function(wkt_path) {
 #' it appears under both an old numeric backbone key and a new alphanumeric key.
 #' Rule: per name, use the most frequent numeric key if there is one, otherwise
 #' the most frequent key. Rows without a name are left unchanged.
+#' Rows that end up with the same cell, year and key are then merged (see
+#' merge_duplicate_cube_rows), because b3gbi::process_cube() drops identical
+#' rows and would otherwise lose occurrences.
 harmonise_species_keys <- function(df) {
   ok <- !is.na(df$species) & df$species != "" & !is.na(df$specieskey) & df$specieskey != ""
   pick <- function(keys) {
@@ -292,5 +319,60 @@ harmonise_species_keys <- function(df) {
   }
   chosen <- tapply(df$specieskey[ok], df$species[ok], pick)
   df$specieskey[ok] <- unname(chosen[df$species[ok]])
-  df
+  merge_duplicate_cube_rows(df)
+}
+
+#' Merge rows sharing cell, year, species key and name: occurrences are summed,
+#' minimum uncertainties take the minimum, other columns keep the first row's
+#' value. Row order of the first occurrence of each group is kept.
+merge_duplicate_cube_rows <- function(df) {
+  if (!all(c("mgrscellcode", "year", "specieskey", "species", "occurrences") %in% names(df))) return(df)
+  k <- paste(df$mgrscellcode, df$year, df$specieskey, df$species, sep = "\r")
+  if (!anyDuplicated(k)) return(df)
+  g <- match(k, unique(k))
+  first <- !duplicated(g)
+  out <- df[first, , drop = FALSE]
+  gi <- g[first]
+  out$occurrences <- as.vector(tapply(df$occurrences, g, sum))[gi]
+  for (col in intersect(c("mincoordinateuncertaintyinmeters", "mintemporaluncertainty"), names(df))) {
+    v <- suppressWarnings(as.numeric(df[[col]]))
+    m <- tapply(v, g, function(x) if (all(is.na(x))) NA_real_ else min(x, na.rm = TRUE))
+    out[[col]] <- as.vector(m)[gi]
+  }
+  rownames(out) <- NULL
+  out
+}
+
+# ---------------------------------------------------------------------------
+# Site cubes
+# ---------------------------------------------------------------------------
+
+#' One cube per site_id under inst/extdata/ramsar_site_data_100m_<continent>/<country>/,
+#' the largest file where a site appears more than once (the D6.1 rule).
+discover_site_cubes <- function(root = "inst/extdata",
+                                continents = c("africa", "antarctica", "asia", "europe",
+                                               "northamerica", "oceania", "southamerica")) {
+  found <- list()
+  for (cont in continents) {
+    data_dir <- file.path(root, paste0("ramsar_site_data_100m_", cont))
+    if (!dir.exists(data_dir)) next
+    for (country in list.dirs(data_dir, full.names = FALSE, recursive = FALSE)) {
+      for (cf in list.files(file.path(data_dir, country), pattern = "\\.csv$", full.names = TRUE)) {
+        fn <- basename(cf)
+        m <- regexpr("^site_[0-9]+", fn)
+        site_id <- if (m != -1) regmatches(fn, m) else sub("(_[a-zA-Z0-9_]+)?_data\\.csv$", "", fn)
+        found[[length(found) + 1]] <- data.frame(cont = cont, country = country, site_id = site_id,
+                                                 file_path = cf, size = file.info(cf)$size,
+                                                 stringsAsFactors = FALSE)
+      }
+    }
+  }
+  all <- do.call(rbind, found)
+  all$order <- seq_len(nrow(all))
+  x <- all[order(all$site_id, -all$size, all$order), ]
+  x <- x[!duplicated(x$site_id), ]
+  x <- x[order(x$order), ]
+  x$order <- NULL
+  rownames(x) <- NULL
+  x
 }

@@ -9,9 +9,10 @@
 #   output/sufficiency_v1/sufficiency_raw.csv
 #   output/data_sufficiency/subgroup_analysis/all_tests_results_v2.csv
 #
-# What to expect (from the 25-site pilot, 120 non-herps combinations):
+# What to expect (full run, 6,301 non-herps combinations):
 #   EXACT  site area, total occurrences, density, D6.1 precision definition,
-#          Chao2 by key, annual coverage (b3gbi rule)
+#          Chao2 by key (except where D6.1 kept an old value because Chao2 is
+#          undefined), annual coverage (b3gbi rule)
 #   DIFFER binary temporal statistic: v2 used b3gbi 0.9.x, whose annual
 #          richness is wrong where species keys are alphanumeric
 #   DIFFER Chao2 by name: only where a species name has more than one key
@@ -42,9 +43,12 @@ cat(sprintf("Non-herps combinations present in both new and v2: %d\n\n", nrow(j)
 cat("Expected EXACT:\n")
 check("site area (km2)", same(j$site_area_km2, j$v2_area), "exact")
 check("total occurrences", same(j$n_occurrences, j$v2_total_occ), "exact")
-check("density (occ/km2)", same(j$density_km2, j$v2_density), "exact")
-check("precision, D6.1 definition", same(j$precision_ratio_d61, j$pub_prec), "exact")
-check("Chao2 completeness by key", same(j$chao2_completeness_bykey, j$pub_chao2), "exact")
+# Site areas of very small sites can differ in the 9th significant digit between
+# sf/GEOS/lwgeom builds, so derived values are compared to 1 part in a million.
+check("density (occ/km2)", same(j$density_km2, j$v2_density, 1e-6), "exact")
+check("precision, D6.1 definition", same(j$precision_ratio_d61, j$pub_prec, 1e-6), "exact")
+fb <- is.na(j$chao2_completeness_bykey) & !is.na(j$pub_chao2)   # the old fallback, see below
+check("Chao2 completeness by key (excluding old fallback)", same(j$chao2_completeness_bykey, j$pub_chao2)[!fb], "exact")
 check("annual coverage deficit (b3gbi rule)", same(j$coverage_deficit_b3gbi, j$pub_sac, 1e-6), "exact")
 cat("\nExpected to differ (explained):\n")
 check("binary temporal statistic vs v2", same(j$temporal_binary, j$v2_td_annual), "differ")
@@ -52,7 +56,6 @@ ch <- same(j$chao2_completeness, j$pub_chao2)
 check("Chao2 completeness by name", ch, "differ")
 cat(sprintf("    differences at combinations with split species names: %d of %d\n",
             sum(!ch & j$n_names_multi_key > 0), sum(!ch)))
-fb <- is.na(j$chao2_completeness_bykey) & !is.na(j$pub_chao2)
 cat(sprintf("    published Chao2 present where it is undefined (the old fallback): %d\n", sum(fb)))
 
 missing_in_new <- v2 %>% filter(site_id %in% new$site_id) %>% select(site_id, subset) %>%

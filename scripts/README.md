@@ -36,6 +36,7 @@ onwards. Thresholds are applied in a separate step, so they can be varied withou
 
     Rscript scripts/run_sufficiency.R --cores 8            # writes output/sufficiency_v1/sufficiency_raw.csv
     Rscript scripts/apply_sufficiency_thresholds.R         # writes sufficiency_results.csv, sites_passing.csv
+    Rscript scripts/apply_sufficiency_thresholds.R --precision-rule median   # alternative precision rule
     Rscript scripts/check_sufficiency_against_d61.R        # optional comparison with the D6.1 results
     Rscript -e 'testthat::test_file("scripts/tests/test_sufficiency_criteria.R")'
 
@@ -48,9 +49,25 @@ The runner is resumable and runs each site in its own R process. All criterion f
 | Chao2 completeness | observed / bias-corrected Chao2 richness; species x 100 m cell incidence, years pooled | ≥ 0.70 |
 | Coverage deficit | 1 − mean annual incidence sample coverage (iNEXT), over years with at least 2 occupied cells and more than 5 species x cell entries | ≤ 0.10 |
 | Temporal decoupling | Cha (2007) distance between min-max scaled annual total occurrences and observed richness | ≥ elbow threshold |
-| Spatial precision | occurrence-weighted mean uncertainty area (π r²) / site area | ≤ 0.10 |
+| Spatial precision | occurrence-weighted mean uncertainty area (π r²) / site area (`--precision-rule median`: weighted median; `d61`: the D6.1 site-level definition) | ≤ 0.10 |
 
 A criterion that cannot be computed (for example Chao2 with fewer than two occupied cells) counts as a
 fail. Species are identified by scientific name, because the cubes carry two GBIF key systems and the
 same species can appear under two keys. Herpetofauna includes Amphibia, Squamata, Testudines,
 Crocodylia and Rhynchocephalia.
+
+The threshold step also prints how many combinations pass under each coverage and precision rule.
+
+## Indicators for passing combinations, version 1
+
+    Rscript scripts/run_indicators.R --cores 2     # writes output/indicators_v1/
+    Rscript scripts/summarise_indicators.R         # writes indicator_summary.csv, trend_direction.csv
+
+`run_indicators.R` runs `worker_indicators.R` for every combination in
+`output/sufficiency_v1/sites_passing.csv`: all b3gbi time-series indicators (normal-approximation
+bootstrap intervals, 1000 replicates) and the MAGV reliability series (`scripts/lib/magv.R`). It
+requires b3gbi 1.0.0 or later and harmonises species keys by scientific name before building the
+cube, so a species recorded under two GBIF keys is counted once. Indicators that fail with intervals
+are rerun without them, and the outcome of every indicator is listed in
+`output/indicators_v1/status.csv`. Taxonomic distinctness queries GBIF through taxize, so it needs
+internet access. Requires b3gbi, taxize, rnaturalearthdata, data.table and dplyr.

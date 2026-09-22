@@ -70,6 +70,8 @@ rows <- lapply(SUBSETS, function(subset) {
     temporal_binary = binary_jaccard_distance(series$total_occ, series$richness),
     precision_ratio = prec$ratio,
     mean_uncertainty_area_km2 = prec$mean_area_km2,
+    precision_ratio_median = prec$ratio_median,
+    median_uncertainty_area_km2 = prec$median_area_km2,
     frac_occ_no_uncertainty = prec$frac_occ_missing)
 })
 

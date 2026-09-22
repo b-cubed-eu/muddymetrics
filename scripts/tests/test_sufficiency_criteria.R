@@ -110,6 +110,40 @@ test_that("annual coverage table records cells and matrix size per year", {
   expect_equal(tab$matrix_size[1], 8)
 })
 
+test_that("annual coverage equals iNEXT::DataInfo on the dense species x cell matrix", {
+  dense_sc <- function(y) {
+    pairs <- unique(y[, c("species", "mgrscellcode")])
+    m <- (unclass(table(pairs$species, pairs$mgrscellcode)) > 0) * 1L
+    tryCatch(as.numeric(suppressWarnings(iNEXT::DataInfo(list(a = m), datatype = "incidence_raw"))$SC),
+             error = function(e) NA_real_)
+  }
+  set.seed(11)
+  n_checked <- 0
+  for (k in 1:300) {
+    n_sp <- sample(1:30, 1); n_cell <- sample(1:12, 1); p <- runif(1, 0.02, 0.6)
+    g <- expand.grid(species = paste0("sp", 1:n_sp), mgrscellcode = paste0("C", 1:n_cell),
+                     stringsAsFactors = FALSE)
+    g <- g[runif(nrow(g)) < p, ]
+    if (nrow(g) == 0) next
+    g$year <- 2000; g$occurrences <- 1
+    tab <- annual_coverage_table(g)
+    expect_equal(tab$sc, dense_sc(g))
+    expect_equal(tab$matrix_size, length(unique(g$species)) * length(unique(g$mgrscellcode)))
+    n_checked <- n_checked + 1
+  }
+  expect_gt(n_checked, 250)
+  # edge cases: 1 species x 1 cell, 1 species x many cells, many species x 1 cell, all singletons
+  e <- list(data.frame(species = "a", mgrscellcode = "C1"),
+            data.frame(species = "a", mgrscellcode = paste0("C", 1:5)),
+            data.frame(species = paste0("s", 1:5), mgrscellcode = "C1"),
+            data.frame(species = paste0("s", 1:4), mgrscellcode = paste0("C", 1:4)),
+            data.frame(species = c("a", "a", "b", "b"), mgrscellcode = c("C1", "C2", "C1", "C2")))
+  for (g in e) {
+    g$year <- 2000; g$occurrences <- 1
+    expect_equal(annual_coverage_table(g)$sc, dense_sc(g))
+  }
+})
+
 test_that("single-cell years get SC = 1 and only the min_cells rule drops them", {
   one_cell <- make_cube(lapply(1:6, function(s) c(s, C[1], 2000, 1)))   # 6 spp, 1 cell
   two_cell <- make_cube(list(c(1, C[1], 2001, 1), c(2, C[1], 2001, 1), c(3, C[1], 2001, 1),
@@ -200,6 +234,19 @@ test_that("precision ratio: occurrence-weighted mean of areas, missing share", {
   expect_equal(r$ratio, expected / 2)
   expect_equal(r$frac_occ_missing, 0.6)
   expect_true(is.na(precision_ratio(df[3, ], 2)$ratio))
+  # weighted median radius: weights 3 (100 m) and 1 (1000 m) -> 100 m
+  expect_equal(r$median_area_km2, pi * 0.1^2)
+  expect_equal(r$ratio_median, pi * 0.1^2 / 2)
+  expect_true(is.na(precision_ratio(df[3, ], 2)$ratio_median))
+})
+
+test_that("weighted median", {
+  expect_equal(weighted_median(c(3, 1, 2), c(1, 1, 1)), 2)
+  expect_equal(weighted_median(c(1, 2, 3, 4), c(1, 1, 1, 1)), 2)   # lower median
+  expect_equal(weighted_median(c(1, 10), c(1, 5)), 10)
+  expect_equal(weighted_median(c(5, 1, 10), c(2, 1, 1)), 5)
+  set.seed(9); x <- runif(101)
+  expect_equal(weighted_median(x, rep(1, 101)), median(x))
 })
 
 test_that("D6.1 precision definition: unweighted mean radius, then area", {
@@ -274,4 +321,67 @@ test_that("after harmonisation b3gbi counts a two-key species once", {
   }
   expect_equal(rich(d), c(2, 1))                           # the problem
   expect_equal(rich(harmonise_species_keys(d)), c(1, 1))   # fixed
+})
+
+test_that("harmonisation merges rows that collide, so b3gbi keeps every occurrence", {
+  skip_if_not_installed("b3gbi")
+  suppressPackageStartupMessages(library(b3gbi))
+  # same cell and year under two keys; b3gbi drops identical rows after harmonising
+  d <- data.frame(year = c(2019, 2019, 2019, 2020), species = c("P l", "P l", "Q q", "P l"),
+                  specieskey = c("11345536", "1579202", "7", "1579202"),
+                  mgrscellcode = c("30UWB024930", "30UWB024930", "30UWB024930", "30UWB024930"),
+                  occurrences = c(1, 1, 3, 2), mincoordinateuncertaintyinmeters = c(70.7, 2, NA, 5),
+                  stringsAsFactors = FALSE)
+  h <- harmonise_species_keys(d)
+  expect_equal(nrow(h), 3)
+  expect_equal(h$occurrences, c(2, 3, 2))
+  expect_equal(h$mincoordinateuncertaintyinmeters, c(2, NA, 5))
+  expect_equal(sum(h$occurrences), sum(d$occurrences))
+  occ <- function(x) {
+    cube <- suppressMessages(suppressWarnings(b3gbi::process_cube(x, cols_cellCode = "mgrscellcode",
+              cols_speciesKey = "specieskey", cols_scientificName = "species")))
+    as.data.frame(b3gbi::total_occ_ts(cube)$data)$diversity_val
+  }
+  expect_equal(occ(h), c(5, 2))
+  # without duplicates the data are returned unchanged
+  expect_identical(merge_duplicate_cube_rows(d[3:4, ]), d[3:4, ])
+})
+
+test_that("MAGV reliability: rolling mean |change| and sd over 5 years", {
+  magv <- c("scripts/lib/magv.R", "../lib/magv.R")
+  source(magv[file.exists(magv)][1])
+  n <- c(10, 20, 10, 10, 15, 15, 15, 15, 15, 15, 16)
+  s <- magv_series(1990:2000, n)
+  rc <- c(NA, 1, -0.5, 0, 0.5, 0, 0, 0, 0, 0, 1 / 15)
+  expect_equal(s$relative_change, rc)
+  expect_true(all(is.na(s$reliability[1:4])))
+  w <- rc[1:5]; expect_equal(s$lma_abs[5], mean(abs(w), na.rm = TRUE))
+  expect_equal(s$volatility[5], sd(w, na.rm = TRUE))
+  w <- rc[6:10]; expect_equal(s$reliability[10], 1)          # flat window
+  expect_equal(s$phase[10], "Plateau of Stability")
+  expect_equal(s$phase[1], "Discovery Phase")
+  # unsorted input is sorted by year
+  expect_equal(magv_series(rev(1990:2000), rev(n))$reliability, s$reliability)
+  m <- magv_summary(s)
+  st <- which(s$phase == "Plateau of Stability")
+  expect_equal(m$stable_run_length, max(rle(s$phase == "Plateau of Stability")$lengths[rle(s$phase == "Plateau of Stability")$values]))
+  expect_equal(m$has_usable_window, m$stable_run_length >= 5)
+  expect_equal(m$n_years, 11)
+  flat <- magv_summary(magv_series(2000:2003, c(1, 2, 3, 4)))   # shorter than the window
+  expect_equal(flat$stable_run_length, 0); expect_true(is.na(flat$mean_reliability))
+})
+
+test_that("site cube discovery: one file per site, the largest, first on ties", {
+  root <- file.path(tempdir(), "disc"); unlink(root, recursive = TRUE)
+  d1 <- file.path(root, "ramsar_site_data_100m_europe", "France"); dir.create(d1, recursive = TRUE)
+  d2 <- file.path(root, "ramsar_site_data_100m_africa", "Chad"); dir.create(d2, recursive = TRUE)
+  w <- function(path, n) writeLines(rep("x", n), path)
+  w(file.path(d1, "site_5_A_data.csv"), 10); w(file.path(d1, "site_5_B_data.csv"), 50)
+  w(file.path(d1, "site_50_C_data.csv"), 5); w(file.path(d1, "site_5_notes.txt"), 500)
+  w(file.path(d2, "site_7_X_data.csv"), 20); w(file.path(d1, "site_7_Y_data.csv"), 20)
+  x <- discover_site_cubes(root)
+  expect_setequal(x$site_id, c("site_5", "site_50", "site_7"))
+  expect_equal(basename(x$file_path[x$site_id == "site_5"]), "site_5_B_data.csv")
+  expect_equal(basename(x$file_path[x$site_id == "site_7"]), "site_7_X_data.csv")  # africa comes first
+  expect_equal(x$cont[x$site_id == "site_7"], "africa")
 })

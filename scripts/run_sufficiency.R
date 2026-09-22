@@ -12,8 +12,8 @@
 # are listed in failures.csv with the error output kept in logs/.
 
 suppressPackageStartupMessages({ library(dplyr); library(parallel) })
+source("scripts/lib/sufficiency_criteria.R")
 
-CONTINENTS <- c("africa", "antarctica", "asia", "europe", "northamerica", "oceania", "southamerica")
 OUT_DIR <- "output/sufficiency_v1"
 
 arg <- function(flag, default = NULL) {
@@ -23,30 +23,10 @@ arg <- function(flag, default = NULL) {
 n_cores <- as.integer(arg("--cores", "8"))
 sites_file <- arg("--sites")
 
-# Site discovery, identical to run_subgroup_data_sufficiency_parallel.R so the
-# site set is comparable with D6.1: one cube per site_id, the largest file
-# where a site appears more than once.
-discover_sites <- function() {
-  found <- list()
-  for (cont in CONTINENTS) {
-    data_dir <- file.path("inst/extdata", paste0("ramsar_site_data_100m_", cont))
-    if (!dir.exists(data_dir)) next
-    for (country in list.dirs(data_dir, full.names = FALSE, recursive = FALSE)) {
-      for (cf in list.files(file.path(data_dir, country), pattern = "\\.csv$", full.names = TRUE)) {
-        fn <- basename(cf)
-        m <- regexpr("^site_[0-9]+", fn)
-        site_id <- if (m != -1) regmatches(fn, m) else sub("(_[a-zA-Z0-9_]+)?_data\\.csv$", "", fn)
-        found[[length(found) + 1]] <- data.frame(cont = cont, country = country, site_id = site_id,
-                                                 file_path = cf, size = file.info(cf)$size,
-                                                 stringsAsFactors = FALSE)
-      }
-    }
-  }
-  bind_rows(found) %>% group_by(site_id) %>% filter(size == max(size)) %>%
-    filter(row_number() == 1) %>% ungroup()
-}
-
-sites <- discover_sites()
+# Site discovery (scripts/lib/sufficiency_criteria.R), identical to
+# run_subgroup_data_sufficiency_parallel.R so the site set is comparable with
+# D6.1: one cube per site_id, the largest file where a site appears more than once.
+sites <- discover_site_cubes()
 cat(sprintf("Discovered %d sites.\n", nrow(sites)))
 if (!is.null(sites_file)) {
   wanted <- trimws(readLines(sites_file)); wanted <- wanted[wanted != ""]
