@@ -28,3 +28,29 @@ Ramsar site boundaries, GRIIS checklists and GIDIAS impact records under `inst/e
 Outputs are written to `output/` and `report_figures/`.
 
 `generate_static_gallery.R` builds the GitHub Pages gallery in `docs/` from per-site plots in `output/`.
+
+## Data-sufficiency screen, version 1
+
+A single worker computes all criteria for every site x taxon combination, from records dated 1990
+onwards. Thresholds are applied in a separate step, so they can be varied without recomputing.
+
+    Rscript scripts/run_sufficiency.R --cores 8            # writes output/sufficiency_v1/sufficiency_raw.csv
+    Rscript scripts/apply_sufficiency_thresholds.R         # writes sufficiency_results.csv, sites_passing.csv
+    Rscript scripts/check_sufficiency_against_d61.R        # optional comparison with the D6.1 results
+    Rscript -e 'testthat::test_file("scripts/tests/test_sufficiency_criteria.R")'
+
+The runner is resumable and runs each site in its own R process. All criterion functions are in
+`scripts/lib/sufficiency_criteria.R`. Requires data.table, dplyr, sf, iNEXT and testthat.
+
+| Criterion | Definition | Pass |
+|---|---|---|
+| Density | occurrences / geodesic site area (km²) | ≥ 0.25 |
+| Chao2 completeness | observed / bias-corrected Chao2 richness; species x 100 m cell incidence, years pooled | ≥ 0.70 |
+| Coverage deficit | 1 − mean annual incidence sample coverage (iNEXT), over years with at least 2 occupied cells and more than 5 species x cell entries | ≤ 0.10 |
+| Temporal decoupling | Cha (2007) distance between min-max scaled annual total occurrences and observed richness | ≥ elbow threshold |
+| Spatial precision | occurrence-weighted mean uncertainty area (π r²) / site area | ≤ 0.10 |
+
+A criterion that cannot be computed (for example Chao2 with fewer than two occupied cells) counts as a
+fail. Species are identified by scientific name, because the cubes carry two GBIF key systems and the
+same species can appear under two keys. Herpetofauna includes Amphibia, Squamata, Testudines,
+Crocodylia and Rhynchocephalia.
