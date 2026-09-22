@@ -26,11 +26,11 @@ magv_series <- function(year, total_occ, window = 5, threshold = 0.8) {
 #' Longest run of consecutive stable rows; usable if at least `min_run` long.
 magv_summary <- function(s, min_run = 5) {
   st <- s$phase == "Plateau of Stability"
-  r <- rle(st); len <- 0L; start <- end <- NA
+  r <- rle(st); len <- 0L; start <- end <- NA_real_
   if (any(r$values)) {
     j <- which(r$values)[which.max(r$lengths[r$values])]
     endi <- cumsum(r$lengths)[j]; starti <- endi - r$lengths[j] + 1
-    len <- r$lengths[j]; start <- s$year[starti]; end <- s$year[endi]
+    len <- r$lengths[j]; start <- as.numeric(s$year[starti]); end <- as.numeric(s$year[endi])
   }
   data.frame(n_years = nrow(s), first_year = min(s$year), last_year = max(s$year),
              mean_reliability = mean(s$reliability, na.rm = TRUE),

@@ -385,3 +385,58 @@ test_that("site cube discovery: one file per site, the largest, first on ties", 
   expect_equal(basename(x$file_path[x$site_id == "site_7"]), "site_7_X_data.csv")  # africa comes first
   expect_equal(x$cont[x$site_id == "site_7"], "africa")
 })
+
+# ---- v1 indicators (scripts/lib/indicators_v1.R) ----------------------------
+ind_lib <- c("scripts/lib/indicators_v1.R", "../lib/indicators_v1.R")
+source(ind_lib[file.exists(ind_lib)][1])
+
+test_that("MGRS 100 m codes map to the containing 1 km cell", {
+  expect_equal(mgrs_to_1km(c("32VNM641645", "4QFJ123678", "32VNM649649")),
+               c("32VNM6464", "4QFJ1267", "32VNM6464"))
+  expect_error(mgrs_to_1km(c("32VNM6464")))
+})
+
+test_that("simple indicators: occurrences, richness and cumulative richness by name", {
+  d <- data.frame(year = c(2000, 2000, 2000, 2001, 2001, 2002),
+                  species = c("A a", "B b", "A a", "A a", "C c", "B b"),
+                  specieskey = c("1", "2", "1", "9", "3", "2"),
+                  mgrscellcode = c("32VNM641645", "32VNM641645", "32VNM642646", "32VNM700700", "32VNM641645", "32VNM641645"),
+                  occurrences = c(1, 2, 3, 4, 5, 6), stringsAsFactors = FALSE)
+  s <- simple_indicators(d, "100m")
+  expect_equal(s$total_occ, c(6, 9, 6))
+  expect_equal(s$obs_richness, c(2, 2, 1))        # "A a" counted once despite two keys
+  expect_equal(s$cum_richness, c(2, 3, 3))
+  expect_equal(s$n_cells, c(2, 2, 1))
+  s1 <- simple_indicators(d, "1km")
+  expect_equal(s1$n_cells, c(1, 2, 1))             # 641645 and 642646 share 1 km cell 6464
+  expect_equal(s1$total_occ, s$total_occ)
+})
+
+test_that("Hill numbers from frequencies equal b3gbi's hill*_ts on the 100 m grid", {
+  skip_if_not_installed("b3gbi")
+  suppressPackageStartupMessages(library(b3gbi))
+  set.seed(7)
+  cells <- sprintf("31TFJ%03d%03d", rep(1:8, 8) + 100, rep(1:8, each = 8) + 400)
+  rows <- expand.grid(specieskey = 1:30, mgrscellcode = cells, year = 2000:2004, stringsAsFactors = FALSE)
+  rows <- rows[runif(nrow(rows)) < 0.08, ]
+  rows$occurrences <- rpois(nrow(rows), 2) + 1
+  rows$species <- paste0("sp", rows$specieskey); rows$specieskey <- as.character(rows$specieskey)
+  rows$kingdom <- "Animalia"; rows$class <- "Aves"; rows$mincoordinateuncertaintyinmeters <- 50
+  cube <- suppressMessages(suppressWarnings(b3gbi::process_cube(rows, grid_type = "mgrs",
+            cols_cellCode = "mgrscellcode", cols_speciesKey = "specieskey", cols_scientificName = "species",
+            cols_occurrences = "occurrences")))
+  ours <- hill_indicators(rows, "100m", level = 0.95)
+  for (qq in 0:2) {
+    b <- as.data.frame(suppressMessages(suppressWarnings(do.call(paste0("hill", qq, "_ts"),
+           list(data = cube, ci_type = "none", cell_size = "grid"))))$data)
+    b <- b[!is.na(b$diversity_val), ]
+    o <- ours[ours$q == qq, ]
+    expect_equal(o$year, b$year)
+    expect_equal(o$qD, b$diversity_val, tolerance = 1e-10)
+  }
+  # intervals: point estimates unchanged, bounds present where the bootstrap succeeds
+  set.seed(1); ci <- hill_indicators(rows, "100m", level = 0.95, nboot = 20)
+  expect_equal(ci$qD, ours$qD)
+  expect_true(all(ci$qD.LCL[ci$ci_status == "ok"] <= ci$qD[ci$ci_status == "ok"] + 1e-9))
+  expect_true(all(is.na(ci$qD.LCL[ci$ci_status == "failed"])))
+})

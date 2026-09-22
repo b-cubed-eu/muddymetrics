@@ -58,16 +58,21 @@ Crocodylia and Rhynchocephalia.
 
 The threshold step also prints how many combinations pass under each coverage and precision rule.
 
-## Indicators for passing combinations, version 1
+## Indicators, version 1
 
-    Rscript scripts/run_indicators.R --cores 2     # writes output/indicators_v1/
-    Rscript scripts/summarise_indicators.R         # writes indicator_summary.csv, trend_direction.csv
+    Rscript scripts/run_indicators.R --cores 8                                    # point estimates, all evaluated combinations
+    Rscript scripts/run_indicators.R --cores 8 --mode ci --nboot 100 --grids 1km  # bootstrap intervals, passing combinations
+    Rscript scripts/summarise_indicators.R
 
-`run_indicators.R` runs `worker_indicators.R` for every combination in
-`output/sufficiency_v1/sites_passing.csv`: all b3gbi time-series indicators (normal-approximation
-bootstrap intervals, 1000 replicates) and the MAGV reliability series (`scripts/lib/magv.R`). It
-requires b3gbi 1.0.0 or later and harmonises species keys by scientific name before building the
-cube, so a species recorded under two GBIF keys is counted once. Indicators that fail with intervals
-are rerun without them, and the outcome of every indicator is listed in
-`output/indicators_v1/status.csv`. Taxonomic distinctness queries GBIF through taxize, so it needs
-internet access. Requires b3gbi, taxize, rnaturalearthdata, data.table and dplyr.
+For every site x taxon combination the screen evaluated, `worker_indicators.R` computes total
+occurrences, observed and cumulative richness (by scientific name), occupied cells, annual sample
+coverage and the Hill numbers q = 0, 1, 2 at 90% and 95% sample coverage, on the native 100 m MGRS
+grid and on 1 km MGRS cells, plus the MAGV reliability series (`scripts/lib/magv.R`). Combinations
+that pass all five criteria under any precision rule also get bootstrap intervals for the Hill numbers.
+
+The Hill numbers (`scripts/lib/indicators_v1.R`) use b3gbi's coverage-based estimator (iNEXT
+`estimateD` through b3gbi's wrapper) on yearly incidence frequencies, which gives the same values as
+`b3gbi::hill0_ts()` / `hill1_ts()` / `hill2_ts()` on the native grid without building the species x
+cell matrix. Each estimate records the sample size needed to reach the coverage level, the observed
+number of cells, iNEXT's method (rarefaction, observed or extrapolation) and whether its interval
+could be computed. 1 km cells are the MGRS 1 km squares containing the 100 m cells.

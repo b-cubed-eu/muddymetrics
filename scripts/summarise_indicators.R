@@ -1,204 +1,69 @@
 #!/usr/bin/env Rscript
-# Summarises the indicator time series written by run_indicators.R: one row per
-# site x taxon x indicator (full-series and stable-window trends), and counts
-# of positive / negative / neutral trends. Same method as make_part2_summaries.R
-# (the D6.1 version), reading the v1 inputs.
+# Trend summaries of the v1 indicators, one row per site x taxon x indicator.
 #
-# Usage (from the repository root):
-#   Rscript scripts/summarise_indicators.R
-suppressPackageStartupMessages({ library(dplyr); library(tools) })
+# Usage (from the repository root, after run_indicators.R):
+#   Rscript scripts/summarise_indicators.R --grid 1km --level 0.9
+#   Rscript scripts/summarise_indicators.R --grid 1km --level 0.9 --ci hill_ci_1km_b100.csv
+#
+# For each combination and indicator: number of years, mean, linear trend
+# (slope and p value, as in D6.1: ordinary least squares on annual values,
+# direction "up"/"down" when p <= 0.1), and the same trend restricted to the
+# MAGV stable window when there is one. Hill estimates that iNEXT could not
+# compute at the requested coverage are left out. With --ci, the Hill trends
+# are also fitted by weighted least squares, each year weighted by
+# 1 / SE^2 with SE taken from the bootstrap interval.
+#
+# Output: output/indicators_v1/trends_<grid>_<level>.csv and
+#         trend_direction_<grid>_<level>.csv
 
-passing_file <- "output/sufficiency_v1/sites_passing.csv"
-ind_dir <- "output/indicators_v1"
-magv_file <- file.path(ind_dir, "magv_summary.csv")
-
-if (!file.exists(passing_file) || !file.exists(magv_file)) {
-  stop("Input files ", passing_file, " or ", magv_file, " not found")
+suppressPackageStartupMessages(library(data.table))
+arg <- function(flag, default = NULL) {
+  a <- commandArgs(trailingOnly = TRUE); i <- match(flag, a)
+  if (is.na(i) || i == length(a)) default else a[i + 1]
 }
+GRID <- match.arg(arg("--grid", "1km"), c("100m", "1km"))
+LEVEL <- as.numeric(arg("--level", "0.9"))
+CI_FILE <- arg("--ci")
+OUT <- "output/indicators_v1"
 
-passing_combos <- read.csv(passing_file, stringsAsFactors = FALSE)
-magv_summary <- read.csv(magv_file, stringsAsFactors = FALSE)
+simple <- fread(file.path(OUT, "simple.csv"))[grid == GRID]
+hill <- fread(file.path(OUT, "hill.csv"))[grid == GRID & abs(level - LEVEL) < 1e-9 & abs(SC - LEVEL) < 1e-3]
+magv <- fread(file.path(OUT, "magv_summary.csv"))
 
-# Helper to find data frame in nested lists
-find_df <- function(x) {
-  if (is.data.frame(x)) return(x)
-  if (is.list(x)) {
-    for (n in names(x)) {
-      res <- find_df(x[[n]])
-      if (!is.null(res)) return(res)
-    }
-  }
-  return(NULL)
+long <- suppressWarnings(rbind(
+  melt(simple[, .(site_id, subset, year, total_occ, obs_richness, cum_richness, coverage)],
+       id.vars = c("site_id", "subset", "year"), variable.name = "indicator", variable.factor = FALSE),
+  hill[, .(site_id, subset, year, indicator = paste0("hill", q), value = qD)]))
+if (!is.null(CI_FILE)) {
+  ci <- fread(file.path(OUT, CI_FILE))[grid == GRID & abs(level - LEVEL) < 1e-9 & ci_status == "ok" & abs(SC - LEVEL) < 1e-3]
+  ci[, se := (qD.UCL - qD.LCL) / (2 * qnorm(0.975))]
+  se_tab <- ci[se > 0, .(site_id, subset, year, indicator = paste0("hill", q), se)]
+  long <- merge(long, se_tab, by = c("site_id", "subset", "year", "indicator"), all.x = TRUE)
+} else long[, se := NA_real_]
+
+fit <- function(v, y, w = NULL) {
+  if (length(v) < 3 || length(unique(v)) < 2) return(list(slope = NA_real_, p = NA_real_))
+  co <- suppressWarnings(summary(if (is.null(w)) lm(v ~ y) else lm(v ~ y, weights = w)))$coefficients
+  if (nrow(co) < 2) return(list(slope = NA_real_, p = NA_real_))
+  list(slope = co[2, 1], p = co[2, 4])
 }
+direction <- function(slope, p) fifelse(is.na(p), NA_character_, fifelse(p <= 0.1, fifelse(slope > 0, "up", "down"), "none"))
 
-indicator_records <- list()
-skipped_species_level <- 0
-
-cat("Processing full analysis RDS files...\n")
-for (i in seq_len(nrow(passing_combos))) {
-  row <- passing_combos[i, ]
-  site_id <- row$site_id
-  sub <- row$subset
-  cont <- row$continent
-  country <- row$country
-  
-  # Find stable window info
-  magv_row <- magv_summary %>%
-    filter(site_id == !!site_id & subset == !!sub)
-  
-  has_stable <- FALSE
-  stable_start <- NA_integer_
-  stable_end <- NA_integer_
-  if (nrow(magv_row) > 0) {
-    has_stable <- magv_row$has_usable_window[1]
-    stable_start <- magv_row$stable_run_start[1]
-    stable_end <- magv_row$stable_run_end[1]
-  }
-  
-  site_dir <- file.path(ind_dir, site_id)
-  if (!dir.exists(site_dir)) next
-  
-  rds_files <- list.files(site_dir, pattern = paste0("^", sub, "_.*_ts\\.rds$"), full.names = TRUE)
-  
-  for (rf in rds_files) {
-    # Extract indicator name from filename
-    # E.g., aves_obs_richness_ts.rds -> obs_richness
-    base_name <- file_path_sans_ext(basename(rf))
-    parts <- strsplit(base_name, "_")[[1]]
-    indicator_id <- paste(parts[2:(length(parts)-1)], collapse = "_")
-    
-    data_obj <- tryCatch(readRDS(rf), error = function(e) NULL)
-    if (is.null(data_obj)) next
-    
-    df <- find_df(data_obj)
-    if (is.null(df) || nrow(df) == 0) next
-    # Species-level indicators (spec_occ, spec_range, relative_occupancy) hold one
-    # series per species; a single trend over all of them is not meaningful, so
-    # they are left out here (make_part2_summaries.R pooled them).
-    if ("scientificName" %in% names(df) || "taxonKey" %in% names(df)) {
-      skipped_species_level <- skipped_species_level + 1
-      next
-    }
-    
-    # Identify value column
-    val_cols <- c("diversity_val", "value", "richness", "diversity", "evenness", "completeness", 
-                  "density", "hill0", "hill1", "hill2", "pielou", "williams")
-    existing_cols <- intersect(names(df), val_cols)
-    if (length(existing_cols) == 0) next
-    val_col <- existing_cols[1]
-    
-    # Sort by year
-    df <- df %>% arrange(year)
-    
-    n_yrs <- nrow(df)
-    first_yr <- min(df$year)
-    last_yr <- max(df$year)
-    mean_val <- mean(df[[val_col]], na.rm = TRUE)
-    start_val <- df[[val_col]][1]
-    end_val <- df[[val_col]][n_yrs]
-    
-    # Linear model over full time series
-    trend_slope <- NA_real_
-    trend_p <- NA_real_
-    if (n_yrs >= 3) {
-      lm_fit <- tryCatch(lm(df[[val_col]] ~ df$year), error = function(e) NULL)
-      if (!is.null(lm_fit)) {
-        summary_lm <- summary(lm_fit)
-        if (nrow(summary_lm$coefficients) >= 2) {
-          trend_slope <- summary_lm$coefficients[2, 1]
-          trend_p <- summary_lm$coefficients[2, 4]
-        }
-      }
-    }
-    
-    # CIs
-    ci_lower_mean <- NA_real_
-    ci_upper_mean <- NA_real_
-    if ("ll" %in% names(df)) {
-      ci_lower_mean <- mean(df$ll, na.rm = TRUE)
-    }
-    if ("ul" %in% names(df)) {
-      ci_upper_mean <- mean(df$ul, na.rm = TRUE)
-    }
-    
-    # Stable window trend
-    trend_slope_stable <- NA_real_
-    first_yr_stable <- NA_integer_
-    last_yr_stable <- NA_integer_
-    
-    if (has_stable && !is.na(stable_start) && !is.na(stable_end)) {
-      df_stable <- df %>% filter(year >= stable_start & year <= stable_end)
-      n_stable_yrs <- nrow(df_stable)
-      if (n_stable_yrs >= 1) {
-        first_yr_stable <- min(df_stable$year)
-        last_yr_stable <- max(df_stable$year)
-      }
-      if (n_stable_yrs >= 3) {
-        lm_fit_stable <- tryCatch(lm(df_stable[[val_col]] ~ df_stable$year), error = function(e) NULL)
-        if (!is.null(lm_fit_stable)) {
-          summary_lm_stable <- summary(lm_fit_stable)
-          if (nrow(summary_lm_stable$coefficients) >= 2) {
-            trend_slope_stable <- summary_lm_stable$coefficients[2, 1]
-          }
-        }
-      }
-    }
-    
-    indicator_records[[length(indicator_records) + 1]] <- data.frame(
-      site_id = site_id,
-      subset = sub,
-      continent = cont,
-      country = country,
-      indicator = indicator_id,
-      n_years = n_yrs,
-      first_year = first_yr,
-      last_year = last_yr,
-      mean_value = mean_val,
-      start_value = start_val,
-      end_value = end_val,
-      trend_slope = trend_slope,
-      trend_p_value = trend_p,
-      ci_lower_mean = ci_lower_mean,
-      ci_upper_mean = ci_upper_mean,
-      trend_slope_stable = trend_slope_stable,
-      first_year_stable = first_yr_stable,
-      last_year_stable = last_yr_stable,
-      stringsAsFactors = FALSE
-    )
-  }
-}
-
-cat(sprintf("Species-level series left out of the trend summary: %d\n", skipped_species_level))
-
-if (length(indicator_records) > 0) {
-  indicator_summary_df <- do.call(rbind, indicator_records)
-  write.csv(indicator_summary_df, file.path(ind_dir, "indicator_summary.csv"), row.names = FALSE)
-  cat(sprintf("Saved %s with %d records.\n", file.path(ind_dir, "indicator_summary.csv"), nrow(indicator_summary_df)))
-  
-  # Generate trend direction summary
-  # Classify: Positive (slope > 0, p <= 0.1), Negative (slope < 0, p <= 0.1), Neutral-Stable (p > 0.1 or slope == 0)
-  trend_direction_df <- indicator_summary_df %>%
-    mutate(
-      direction = case_when(
-        is.na(trend_slope) ~ "Neutral",
-        is.na(trend_p_value) ~ "Neutral",
-        trend_p_value <= 0.1 & trend_slope > 0 ~ "Positive",
-        trend_p_value <= 0.1 & trend_slope < 0 ~ "Negative",
-        TRUE ~ "Neutral"
-      )
-    ) %>%
-    group_by(continent, subset, indicator) %>%
-    summarise(
-      n_combos = n(),
-      n_positive = sum(direction == "Positive"),
-      n_negative = sum(direction == "Negative"),
-      n_neutral = sum(direction == "Neutral"),
-      .groups = "drop"
-    )
-  
-  write.csv(trend_direction_df, file.path(ind_dir, "trend_direction.csv"), row.names = FALSE)
-  cat(sprintf("Saved %s with %d rows.\n", file.path(ind_dir, "trend_direction.csv"), nrow(trend_direction_df)))
-  
-} else {
-  cat("No indicator records found to summarize.\n")
-}
+long <- merge(long, magv[, .(site_id, subset, stable_run_start, stable_run_end, has_usable_window)], by = c("site_id", "subset"), all.x = TRUE)
+tr <- long[order(year), {
+  f <- fit(value, year)
+  st <- has_usable_window[1] %in% TRUE & !is.na(stable_run_start[1])
+  fs <- if (st) { k <- year >= stable_run_start[1] & year <= stable_run_end[1]; fit(value[k], year[k]) } else list(slope = NA_real_, p = NA_real_)
+  okw <- !is.na(se)
+  fw <- if (sum(okw) >= 3) fit(value[okw], year[okw], 1 / se[okw]^2) else list(slope = NA_real_, p = NA_real_)
+  .(n_years = .N, first_year = min(year), last_year = max(year), mean_value = mean(value),
+    slope = f$slope, p = f$p, slope_stable = fs$slope, p_stable = fs$p,
+    n_years_with_se = sum(okw), slope_weighted = fw$slope, p_weighted = fw$p)
+}, by = .(site_id, subset, indicator)]
+tr[, `:=`(direction = direction(slope, p), direction_weighted = direction(slope_weighted, p_weighted))]
+tag <- paste0(GRID, "_", LEVEL)
+fwrite(tr, file.path(OUT, paste0("trends_", tag, ".csv")))
+dir <- tr[!is.na(direction), .(combinations = .N, up = sum(direction == "up"), none = sum(direction == "none"),
+                               down = sum(direction == "down")), by = .(subset, indicator)]
+fwrite(dir, file.path(OUT, paste0("trend_direction_", tag, ".csv")))
+cat(sprintf("Grid %s, coverage %.2f: %d trend rows written to %s\n", GRID, LEVEL, nrow(tr), file.path(OUT, paste0("trends_", tag, ".csv"))))
