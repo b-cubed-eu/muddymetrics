@@ -35,8 +35,10 @@ A single worker computes all criteria for every site x taxon combination, from r
 onwards. Thresholds are applied in a separate step, so they can be varied without recomputing.
 
     Rscript scripts/run_sufficiency.R --cores 8            # writes output/sufficiency_v1/sufficiency_raw.csv
+    Rscript scripts/run_sufficiency.R --cores 8 --grid 1km # the same on 1 km cells, in output/sufficiency_v1_1km/
     Rscript scripts/apply_sufficiency_thresholds.R         # writes sufficiency_results.csv, sites_passing.csv
     Rscript scripts/apply_sufficiency_thresholds.R --precision-rule median   # alternative precision rule
+    Rscript scripts/apply_sufficiency_thresholds.R --in output/sufficiency_v1_1km/sufficiency_raw.csv
     Rscript scripts/check_sufficiency_against_d61.R        # optional comparison with the D6.1 results
     Rscript -e 'testthat::test_file("scripts/tests/test_sufficiency_criteria.R")'
 
@@ -46,10 +48,13 @@ The runner is resumable and runs each site in its own R process. All criterion f
 | Criterion | Definition | Pass |
 |---|---|---|
 | Density | occurrences / geodesic site area (km²) | ≥ 0.25 |
-| Chao2 completeness | observed / bias-corrected Chao2 richness; species x 100 m cell incidence, years pooled | ≥ 0.70 |
+| Chao2 completeness | observed / bias-corrected Chao2 richness; species x cell incidence (100 m, or 1 km with `--grid 1km`), years pooled | ≥ 0.70 |
 | Coverage deficit | 1 − mean annual incidence sample coverage (iNEXT), over years with at least 2 occupied cells and more than 5 species x cell entries | ≤ 0.10 |
 | Temporal decoupling | Cha (2007) distance between min-max scaled annual total occurrences and observed richness | ≥ elbow threshold |
 | Spatial precision | occurrence-weighted mean uncertainty area (π r²) / site area (`--precision-rule median`: weighted median; `d61`: the D6.1 site-level definition) | ≤ 0.10 |
+
+Only Chao2 completeness and annual coverage use grid cells as sampling units, so only they change
+with `--grid`.
 
 A criterion that cannot be computed (for example Chao2 with fewer than two occupied cells) counts as a
 fail. Species are identified by scientific name, because the cubes carry two GBIF key systems and the
@@ -62,7 +67,9 @@ The threshold step also prints how many combinations pass under each coverage an
 
     Rscript scripts/run_indicators.R --cores 8                                    # point estimates, all evaluated combinations
     Rscript scripts/run_indicators.R --cores 8 --mode ci --nboot 100 --grids 1km  # bootstrap intervals, passing combinations
-    Rscript scripts/summarise_indicators.R
+    Rscript scripts/summarise_indicators.R --grid 1km --level 0.9 --ci hill_ci_1km_b100.csv   # trends; repeat per grid and level
+    Rscript scripts/check_multiverse.R --precision-rule median     # verdicts across analysis choices
+    Rscript scripts/check_detectability.R --precision-rule median  # smallest detectable trend
 
 For every site x taxon combination the screen evaluated, `worker_indicators.R` computes total
 occurrences, observed and cumulative richness (by scientific name), occupied cells, annual sample
@@ -76,3 +83,10 @@ The Hill numbers (`scripts/lib/indicators_v1.R`) use b3gbi's coverage-based esti
 cell matrix. Each estimate records the sample size needed to reach the coverage level, the observed
 number of cells, iNEXT's method (rarefaction, observed or extrapolation) and whether its interval
 could be computed. 1 km cells are the MGRS 1 km squares containing the 100 m cells.
+
+`summarise_indicators.R` fits each annual series by ordinary least squares and by generalised
+least squares with AR(1) errors (REML, `nlme::gls`), and, with `--ci`, both again with each year
+weighted by its bootstrap variance. A trend counts as up or down when p ≤ `--alpha` (default 0.05).
+`check_multiverse.R` compares the Hill-number verdicts across Hill orders, grids, coverage levels and
+trend models; `check_detectability.R` gives the linear change per decade that a trend test over a
+chosen window would detect with the given power. Both also need data.table, and the trend models nlme.

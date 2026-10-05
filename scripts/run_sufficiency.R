@@ -6,6 +6,8 @@
 #   Rscript scripts/run_sufficiency.R                 # all sites, 8 cores
 #   Rscript scripts/run_sufficiency.R --cores 4
 #   Rscript scripts/run_sufficiency.R --sites pilot_sites.txt   # one site_id per line
+#   Rscript scripts/run_sufficiency.R --grid 1km      # screen on 1 km cells
+#                                    # (results in output/sufficiency_v1_1km/)
 #
 # Resumable: sites that already have a result file are skipped. Each site is
 # run in its own R process, so one failing site cannot stop the run; failures
@@ -14,14 +16,14 @@
 suppressPackageStartupMessages({ library(dplyr); library(parallel) })
 source("scripts/lib/sufficiency_criteria.R")
 
-OUT_DIR <- "output/sufficiency_v1"
-
 arg <- function(flag, default = NULL) {
   a <- commandArgs(trailingOnly = TRUE); i <- match(flag, a)
   if (is.na(i) || i == length(a)) default else a[i + 1]
 }
 n_cores <- as.integer(arg("--cores", "8"))
 sites_file <- arg("--sites")
+grid <- match.arg(arg("--grid", "100m"), c("100m", "1km"))
+OUT_DIR <- if (grid == "100m") "output/sufficiency_v1" else "output/sufficiency_v1_1km"
 
 # Site discovery (scripts/lib/sufficiency_criteria.R), identical to
 # run_subgroup_data_sufficiency_parallel.R so the site set is comparable with
@@ -45,16 +47,16 @@ cat(sprintf("%d already done, %d to run on %d cores.\n", nrow(sites) - nrow(todo
 
 if (nrow(todo) > 0) {
   cl <- makePSOCKcluster(n_cores)
-  status <- parLapply(cl, seq_len(nrow(todo)), function(i, todo, log_dir) {
+  status <- parLapply(cl, seq_len(nrow(todo)), function(i, todo, log_dir, grid) {
     s <- todo[i, ]
     log <- file.path(log_dir, paste0(s$site_id, ".log"))
     code <- system2("Rscript", c("scripts/worker_sufficiency.R", shQuote(s$cont), shQuote(s$country),
-                                 shQuote(s$site_id), shQuote(s$file_path), shQuote(s$out_file)),
+                                 shQuote(s$site_id), shQuote(s$file_path), shQuote(s$out_file), grid),
                     stdout = log, stderr = log)
     ok <- code == 0 && file.exists(s$out_file)
     if (ok) unlink(log)   # keep logs only for failures
     data.frame(site_id = s$site_id, ok = ok, exit_code = code)
-  }, todo = todo, log_dir = log_dir)
+  }, todo = todo, log_dir = log_dir, grid = grid)
   stopCluster(cl)
   status <- bind_rows(status)
   failed <- status[!status$ok, ]

@@ -396,6 +396,18 @@ test_that("MGRS 100 m codes map to the containing 1 km cell", {
   expect_error(mgrs_to_1km(c("32VNM6464")))
 })
 
+test_that("recode_grid leaves 100 m cubes unchanged and merges cells on the 1 km grid", {
+  expect_identical(recode_grid(cube1, "100m"), cube1)
+  k <- recode_grid(cube1, "1km")
+  expect_equal(unique(k$mgrscellcode), "32UNU0000")   # all five 100 m cells lie in one 1 km cell
+  expect_equal(k[, setdiff(names(k), "mgrscellcode")], cube1[, setdiff(names(cube1), "mgrscellcode")])
+  st <- incidence_stats(k)
+  expect_equal(c(st$S, st$T), c(6, 1))
+  expect_true(is.na(chao2_completeness(st)))           # one sampling unit: undefined
+  blank <- cube1[1:2, ]; blank$mgrscellcode[1] <- ""
+  expect_equal(recode_grid(blank, "1km")$mgrscellcode, c("", "32UNU0000"))
+})
+
 test_that("simple indicators: occurrences, richness and cumulative richness by name", {
   d <- data.frame(year = c(2000, 2000, 2000, 2001, 2001, 2002),
                   species = c("A a", "B b", "A a", "A a", "C c", "B b"),

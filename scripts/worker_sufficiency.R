@@ -4,18 +4,24 @@
 # see apply_sufficiency_thresholds.R.
 #
 # Usage (from the repository root):
-#   Rscript scripts/worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file>
+#   Rscript scripts/worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid]
+#
+# grid is "100m" (default, the cube's native cells) or "1km". Only the
+# criteria that use grid cells as sampling units change with the grid: Chao2
+# completeness and annual coverage. Density, temporal decoupling and precision
+# do not depend on it.
 #
 # The cube path is passed explicitly by the runner, so the worker never looks
 # files up by name.
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 5) {
-  cat("Usage: worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file>\n")
+if (!length(args) %in% 5:6) {
+  cat("Usage: worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid]\n")
   quit(status = 1)
 }
 cont <- args[1]; country <- args[2]; site_id <- args[3]
 cube_path <- args[4]; out_file <- args[5]
+grid <- if (length(args) == 6) args[6] else "100m"
 
 suppressPackageStartupMessages({
   library(data.table)
@@ -32,7 +38,7 @@ df_all <- as.data.frame(data.table::fread(
   cube_path, select = cols, showProgress = FALSE,
   colClasses = list(character = c("kingdom", "class", "species", "specieskey", "mgrscellcode"),
                     numeric = c("year", "occurrences", "mincoordinateuncertaintyinmeters"))))
-df <- filter_years(df_all)
+df <- recode_grid(filter_years(df_all), grid)
 
 wkt_files <- find_wkt(WKT_ROOT, site_id)
 area <- if (length(wkt_files) >= 1) {
@@ -43,7 +49,7 @@ prec_d61 <- precision_ratio_d61(df_all, area)
 
 rows <- lapply(SUBSETS, function(subset) {
   sub <- subset_taxon(df, subset)
-  base <- list(continent = cont, country = country, site_id = site_id, subset = subset,
+  base <- list(continent = cont, country = country, site_id = site_id, subset = subset, grid = grid,
                n_rows = nrow(sub), n_occurrences = sum(sub$occurrences, na.rm = TRUE),
                site_area_km2 = area, n_wkt_matches = length(wkt_files),
                precision_ratio_d61 = prec_d61)

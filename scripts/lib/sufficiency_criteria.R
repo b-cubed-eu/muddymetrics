@@ -1,9 +1,9 @@
 # Data-sufficiency criteria for site x taxon occurrence cubes.
 #
 # Pure functions: each takes a data frame of cube rows (one row per
-# species x 100 m MGRS cell x year) and returns numbers. No file I/O except
-# find_wkt() and site_area_km2(). Sourced by the worker and by the tests, so
-# both always use the same code.
+# species x 100 m MGRS cell x year, or x 1 km cell after recode_grid()) and
+# returns numbers. No file I/O except find_wkt() and site_area_km2(). Sourced
+# by the worker and by the tests, so both always use the same code.
 #
 # Expected columns: kingdom, class, species, specieskey, mgrscellcode, year,
 # occurrences, mincoordinateuncertaintyinmeters.
@@ -35,6 +35,26 @@ FIRST_YEAR <- 1990
 #' Keep records from FIRST_YEAR onwards. Rows with missing year are dropped.
 filter_years <- function(df, first_year = FIRST_YEAR) {
   df[!is.na(df$year) & df$year >= first_year, , drop = FALSE]
+}
+
+#' MGRS 100 m cell code -> the MGRS 1 km cell containing it
+#' (e.g. "32VNM641645" -> "32VNM6464"). Stops on codes that are not 100 m.
+mgrs_to_1km <- function(code) {
+  tail <- regmatches(code, regexpr("[0-9]{6}$", code))
+  if (length(tail) != length(code)) stop("Not all cell codes are MGRS 100 m codes (6 trailing digits)")
+  prefix <- substr(code, 1, nchar(code) - 6)
+  paste0(prefix, substr(tail, 1, 2), substr(tail, 4, 5))
+}
+
+#' Recode the cells of a cube to the requested grid. "100m" leaves the cube
+#' unchanged; "1km" replaces each 100 m cell by the 1 km cell containing it.
+#' Rows without a cell code are left as they are.
+recode_grid <- function(df, grid = c("100m", "1km")) {
+  grid <- match.arg(grid)
+  if (grid == "100m") return(df)
+  ok <- !is.na(df$mgrscellcode) & df$mgrscellcode != ""
+  df$mgrscellcode[ok] <- mgrs_to_1km(df$mgrscellcode[ok])
+  df
 }
 
 #' Rows belonging to a taxonomic subset. Uses %in% so that missing class or
@@ -83,7 +103,7 @@ density_km2 <- function(df, area_km2) {
 # Chao2 completeness and pooled sample coverage
 # ---------------------------------------------------------------------------
 
-#' Incidence statistics with 100 m cells as sampling units, years pooled.
+#' Incidence statistics with grid cells as sampling units, years pooled.
 #' Returns S (observed species), T (occupied cells), Q1, Q2 (species in
 #' exactly one / two cells) and U (total species-cell incidences).
 incidence_stats <- function(df, taxon_col = TAXON_COL) {

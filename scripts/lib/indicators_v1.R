@@ -9,16 +9,7 @@
 # large sites.
 #
 # Requires scripts/lib/sufficiency_criteria.R (valid_incidence_rows,
-# incidence_sc) and the b3gbi and iNEXT packages.
-
-#' MGRS 100 m cell code -> the MGRS 1 km cell containing it
-#' (e.g. "32VNM641645" -> "32VNM6464"). Stops on codes that are not 100 m.
-mgrs_to_1km <- function(code) {
-  tail <- regmatches(code, regexpr("[0-9]{6}$", code))
-  if (length(tail) != length(code)) stop("Not all cell codes are MGRS 100 m codes (6 trailing digits)")
-  prefix <- substr(code, 1, nchar(code) - 6)
-  paste0(prefix, substr(tail, 1, 2), substr(tail, 4, 5))
-}
+# incidence_sc, mgrs_to_1km) and the b3gbi and iNEXT packages.
 
 #' Rows used by all indicators here: taxon (scientific name) and cell present,
 #' with the cell recoded to the requested grid.
