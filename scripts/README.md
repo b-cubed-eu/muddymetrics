@@ -14,7 +14,9 @@ Ramsar site boundaries, GRIIS checklists and GIDIAS impact records under `inst/e
 
 ## Run order
 
-1. Per-site cubes: `split_data_cubes_targeted.R`, `split_data_cubes_remaining.R`
+1. Per-site cubes: `split_data_cubes_targeted.R`, `split_data_cubes_remaining.R`; then the 2024-2026
+   update and one taxonomy for all years: `patch_site_cubes_update.R`, `harmonise_cube_taxonomy.R`
+   (see "Updating the site cubes" below)
 2. Data-sufficiency screen: `run_subgroup_data_sufficiency_parallel.R` (calls `worker_subgroup.R`
    and `compute_thresholds.R`), then `global_precision_update.R` and `global_precision_update_corrected.R`
 3. Summary tables: `generate_stats_tables.R`, `final_stats.R`
@@ -99,3 +101,31 @@ weighted by its bootstrap variance. A trend counts as up or down when p ≤ `--a
 `check_multiverse.R` compares the Hill-number verdicts across Hill orders, grids, coverage levels and
 trend models; `check_detectability.R` gives the linear change per decade that a trend test over a
 chosen window would detect with the given power. Both also need data.table, and the trend models nlme.
+
+## Updating the site cubes (2024-2026 data, one taxonomy)
+
+The June 2026 update (GBIF download 0074420-260519110011954, new GBIF backbone) did not reach
+every site cube: sites in countries with folders under more than one continent, sites re-split on
+16-17 June and sites with a dot in their name were skipped, and reptiles were dropped everywhere.
+Two scripts repair this; both copy every file they change to a backup folder first.
+
+1. `patch_site_cubes_update.R` rebuilds the rows from 2024 on from the update file, assigning cells
+   to sites by intersecting them with the site outlines, as in the original split. Rows before 2024
+   are kept. Check first, then run:
+   ```
+   Rscript scripts/patch_site_cubes_update.R --sites site_67,site_838 --out-dir _local_data/cube_patch_check
+   Rscript scripts/patch_site_cubes_update.R --all
+   ```
+   For cubes that already had the update, the summary reports whether the rebuilt rows are identical
+   apart from reptiles.
+2. `harmonise_cube_taxonomy.R` gives the older rows (old backbone, numeric keys) the names and keys
+   of the new backbone, so that a species keeps one name across years. It builds a name table (from
+   the update rows, then the GBIF species-match API; needs internet, resumable) and applies it:
+   ```
+   Rscript scripts/harmonise_cube_taxonomy.R --build --limit 200
+   Rscript scripts/harmonise_cube_taxonomy.R --build
+   Rscript scripts/harmonise_cube_taxonomy.R --apply
+   ```
+
+Functions: `lib/cube_update.R`, `lib/taxonomy_match.R`; tests: `tests/test_cube_update.R`.
+
