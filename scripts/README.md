@@ -39,6 +39,7 @@ onwards. Thresholds are applied in a separate step, so they can be varied withou
     Rscript scripts/apply_sufficiency_thresholds.R         # writes sufficiency_results.csv, sites_passing.csv
     Rscript scripts/apply_sufficiency_thresholds.R --precision-rule median   # alternative precision rule
     Rscript scripts/apply_sufficiency_thresholds.R --in output/sufficiency_v1_1km/sufficiency_raw.csv
+    Rscript scripts/apply_sufficiency_thresholds.R --coverage-rule informative --min-informative-years 10
     Rscript scripts/check_sufficiency_against_d61.R        # optional comparison with the D6.1 results
     Rscript -e 'testthat::test_file("scripts/tests/test_sufficiency_criteria.R")'
 
@@ -49,12 +50,17 @@ The runner is resumable and runs each site in its own R process. All criterion f
 |---|---|---|
 | Density | occurrences / geodesic site area (km²) | ≥ 0.25 |
 | Chao2 completeness | observed / bias-corrected Chao2 richness; species x cell incidence (100 m, or 1 km with `--grid 1km`), years pooled | ≥ 0.70 |
-| Coverage deficit | 1 − mean annual incidence sample coverage (iNEXT), over years with at least 2 occupied cells and more than 5 species x cell entries | ≤ 0.10 |
+| Coverage deficit | 1 − mean annual incidence sample coverage (iNEXT), over years with at least 2 occupied cells and more than 5 species x cell entries (`--coverage-rule informative`: over informative years only, see below) | ≤ 0.10 |
 | Temporal decoupling | Cha (2007) distance between min-max scaled annual total occurrences and observed richness | ≥ elbow threshold |
 | Spatial precision | occurrence-weighted mean uncertainty area (π r²) / site area (`--precision-rule median`: weighted median; `d61`: the D6.1 site-level definition) | ≤ 0.10 |
 
 Only Chao2 completeness and annual coverage use grid cells as sampling units, so only they change
 with `--grid`.
+
+An informative year has at least 20 occupied cells and 50 species x cell incidences
+(`INFORMATIVE_MIN_CELLS`, `INFORMATIVE_MIN_INCIDENCES` in `scripts/lib/sufficiency_criteria.R`). The limits come
+from `scripts/check_informative_years.R`, which subsamples well-sampled 1 km site-years: in years below
+them the estimated annual coverage is too often 0.90 or more while the true coverage is below 0.85.
 
 A criterion that cannot be computed (for example Chao2 with fewer than two occupied cells) counts as a
 fail. Species are identified by scientific name, because the cubes carry two GBIF key systems and the
@@ -84,7 +90,10 @@ cell matrix. Each estimate records the sample size needed to reach the coverage 
 number of cells, iNEXT's method (rarefaction, observed or extrapolation) and whether its interval
 could be computed. 1 km cells are the MGRS 1 km squares containing the 100 m cells.
 
-`summarise_indicators.R` fits each annual series by ordinary least squares and by generalised
+By default `summarise_indicators.R` keeps Hill estimates only from informative years and only where reaching the
+coverage level needs at most twice the observed number of cells (`--hill-years all --max-extrapolation Inf`
+keeps all). `--in` selects the indicator folder; `run_indicators.R` takes `--screen`, `--coverage-rule` and `--out`
+so the indicators can follow another screen run. It fits each annual series by ordinary least squares and by generalised
 least squares with AR(1) errors (REML, `nlme::gls`), and, with `--ci`, both again with each year
 weighted by its bootstrap variance. A trend counts as up or down when p ≤ `--alpha` (default 0.05).
 `check_multiverse.R` compares the Hill-number verdicts across Hill orders, grids, coverage levels and

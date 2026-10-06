@@ -31,8 +31,8 @@ yearly_incidence_freq <- function(v) {
 }
 
 #' Simple yearly indicators: total occurrences, observed richness, cumulative
-#' richness (all by scientific name), plus occupied cells and sample coverage
-#' on the requested grid.
+#' richness (all by scientific name), plus occupied cells, species x cell
+#' incidences and sample coverage on the requested grid.
 simple_indicators <- function(df, grid = c("100m", "1km")) {
   v <- indicator_rows(df, grid)
   years <- sort(unique(v$year))
@@ -44,6 +44,7 @@ simple_indicators <- function(df, grid = c("100m", "1km")) {
     obs_richness = vapply(years, function(y) length(unique(v$taxon[v$year == y])), numeric(1)),
     cum_richness = cumsum(vapply(years, function(y) sum(first_seen == y), numeric(1))),
     n_cells = vapply(inc[as.character(years)], function(z) z$T, numeric(1)),
+    n_incidences = vapply(inc[as.character(years)], function(z) sum(z$freq), numeric(1)),
     coverage = vapply(inc[as.character(years)], function(z) incidence_sc(z$T, z$freq), numeric(1)),
     row.names = NULL)
 }

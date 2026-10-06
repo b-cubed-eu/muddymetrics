@@ -72,6 +72,8 @@ rows <- lapply(SUBSETS, function(subset) {
     n_years_single_cell = sum(cov_tab$n_cells == 1),
     mean_cov_b3gbi = mean_annual_coverage(cov_tab, "b3gbi"),
     mean_cov_min_cells = mean_annual_coverage(cov_tab, "min_cells"),
+    mean_cov_informative = mean_annual_coverage(cov_tab, "informative"),
+    n_years_informative = sum(informative_years(cov_tab)),
     temporal_cha = cha_distance(series$total_occ, series$richness),
     temporal_binary = binary_jaccard_distance(series$total_occ, series$richness),
     precision_ratio = prec$ratio,
@@ -84,6 +86,7 @@ rows <- lapply(SUBSETS, function(subset) {
 out <- data.table::rbindlist(lapply(rows, as.data.frame), fill = TRUE)
 out$coverage_deficit_b3gbi <- 1 - out$mean_cov_b3gbi
 out$coverage_deficit_min_cells <- 1 - out$mean_cov_min_cells
+out$coverage_deficit_informative <- 1 - out$mean_cov_informative
 out$seconds <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
 
 # Write to a temporary file and rename, so an interrupted run never leaves a

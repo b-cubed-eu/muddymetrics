@@ -8,6 +8,11 @@
 # for every grid and level used, with --ci for the 1 km grid):
 #   Rscript scripts/check_multiverse.R                                  # 18 specifications
 #   Rscript scripts/check_multiverse.R --models ols,wls,gls,gls_w --precision-rule median --alpha 0.05
+#   Rscript scripts/check_multiverse.R --in output/indicators_v1b --combos output/sufficiency_v1b_1km/sites_passing.csv
+#
+# --in is the indicator folder (default output/indicators_v1); --combos a CSV with
+# site_id and subset columns giving the combinations to use (default: those
+# passing under --precision-rule in <in>/ci_combinations.csv).
 #
 # Specifications: q = 0, 1, 2 on each of
 #   100 m and 1 km, at 90% and 95% coverage, for each model in --models;
@@ -33,13 +38,15 @@ MODELS <- strsplit(arg("--models", "ols,wls"), ",")[[1]]
 stopifnot(all(MODELS %in% c("ols", "wls", "gls", "gls_w")))
 RULE <- match.arg(arg("--precision-rule", "mean"), c("mean", "median", "d61"))
 ALPHA <- as.numeric(arg("--alpha", "0.05"))
-IN <- "output/indicators_v1"; OUT <- "output/v1_checks"
+IN <- arg("--in", "output/indicators_v1"); OUT <- "output/v1_checks"
+COMBOS <- arg("--combos")
 dir.create(OUT, showWarnings = FALSE, recursive = TRUE)
 
 COLS <- list(ols = c("slope", "p"), wls = c("slope_weighted", "p_weighted"),
              gls = c("slope_gls", "p_gls"), gls_w = c("slope_gls_weighted", "p_gls_weighted"))
 verdict_of <- function(slope, p) fifelse(is.na(p), NA_character_, fifelse(p <= ALPHA, fifelse(slope > 0, "up", "down"), "none"))
-combos <- unique(fread(file.path(IN, "ci_combinations.csv"))[precision_rule == RULE, .(site_id, subset)])
+combos <- if (is.null(COMBOS)) unique(fread(file.path(IN, "ci_combinations.csv"))[precision_rule == RULE, .(site_id, subset)]) else
+  unique(fread(COMBOS)[, .(site_id, subset)])
 
 specs <- list()
 for (g in c("100m", "1km")) for (lv in c("0.9", "0.95")) {
@@ -66,9 +73,9 @@ per[, verdict := fifelse(n_estimable < n_spec, "not all estimable",
                  fifelse(up == n_spec, "always up", fifelse(down == n_spec, "always down",
                  fifelse(none == n_spec, "always none", fifelse(up > 0 & down > 0, "up and down", "mixed")))))]
 
-tag <- paste0(RULE, "_a", ALPHA, if (!identical(MODELS, c("ols", "wls"))) paste0("_", paste(MODELS, collapse = "-")) else "")
+tag <- paste0(if (is.null(COMBOS)) RULE else sub("\\.csv$", "", basename(dirname(COMBOS))), "_a", ALPHA, if (!identical(MODELS, c("ols", "wls"))) paste0("_", paste(MODELS, collapse = "-")) else "")
 fwrite(wide, file.path(OUT, sprintf("multiverse_matrix_%s.csv", tag)))
 fwrite(per, file.path(OUT, sprintf("multiverse_per_combo_%s.csv", tag)))
-cat(sprintf("Precision rule %s, models %s, alpha %.2f: %d combinations, %d specifications each.\n",
-            RULE, paste(MODELS, collapse = ","), ALPHA, nrow(per), n_spec))
+cat(sprintf("Combinations: %s; models %s, alpha %.2f: %d combinations, %d specifications each.\n",
+            if (is.null(COMBOS)) paste("precision rule", RULE) else COMBOS, paste(MODELS, collapse = ","), ALPHA, nrow(per), n_spec))
 print(per[, .N, by = verdict][order(-N)])

@@ -8,6 +8,7 @@
 #   Rscript scripts/run_sufficiency.R --sites pilot_sites.txt   # one site_id per line
 #   Rscript scripts/run_sufficiency.R --grid 1km      # screen on 1 km cells
 #                                    # (results in output/sufficiency_v1_1km/)
+#   Rscript scripts/run_sufficiency.R --out output/my_run   # another output folder
 #
 # Resumable: sites that already have a result file are skipped. Each site is
 # run in its own R process, so one failing site cannot stop the run; failures
@@ -23,7 +24,7 @@ arg <- function(flag, default = NULL) {
 n_cores <- as.integer(arg("--cores", "8"))
 sites_file <- arg("--sites")
 grid <- match.arg(arg("--grid", "100m"), c("100m", "1km"))
-OUT_DIR <- if (grid == "100m") "output/sufficiency_v1" else "output/sufficiency_v1_1km"
+OUT_DIR <- arg("--out", if (grid == "100m") "output/sufficiency_v1" else "output/sufficiency_v1_1km")
 
 # Site discovery (scripts/lib/sufficiency_criteria.R), identical to
 # run_subgroup_data_sufficiency_parallel.R so the site set is comparable with

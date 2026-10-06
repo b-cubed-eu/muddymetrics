@@ -108,6 +108,17 @@ test_that("annual coverage table records cells and matrix size per year", {
   # 2000: s1,s2,s3,s6 in cells C1,C2 -> 4 species x 2 cells
   expect_equal(tab$n_cells[1], 2); expect_equal(tab$n_species[1], 4)
   expect_equal(tab$matrix_size[1], 8)
+  # incidences = species x cell pairs: 2000 has s1:C1, s2:C2, s3:C1, s6:C1 -> 4
+  expect_equal(tab$n_incidences[1], 4)
+})
+
+test_that("the informative rule keeps only years with enough cells and incidences", {
+  tab <- data.frame(year = 1:4, n_cells = c(19, 20, 40, 20), n_incidences = c(500, 49, 50, 50),
+                    matrix_size = 1e3, sc = c(1, 0.99, 0.80, 0.90))
+  expect_equal(informative_years(tab), c(FALSE, FALSE, TRUE, TRUE))
+  expect_equal(mean_annual_coverage(tab, "informative"), mean(c(0.80, 0.90)))
+  expect_true(is.na(mean_annual_coverage(tab[1:2, ], "informative")))   # no informative year: undefined
+  expect_equal(informative_years(tab, min_cells = 0, min_incidences = 0), rep(TRUE, 4))
 })
 
 test_that("annual coverage equals iNEXT::DataInfo on the dense species x cell matrix", {

@@ -28,6 +28,14 @@ MIN_ROWS <- 10      # subsets with fewer cube rows are not evaluated
 MIN_YEARS <- 3      # minimum years for the temporal criterion
 FIRST_YEAR <- 1990
 
+# An informative year (coverage rule "informative"): at least this many occupied
+# cells and species x cell incidences. In subsamples of well-sampled 1 km site-years,
+# years below these limits too often show annual coverage >= 0.90 when their true
+# coverage is below 0.85; at the limits that happens in under 5% of cases for every
+# taxonomic group (scripts/check_informative_years.R).
+INFORMATIVE_MIN_CELLS <- 20
+INFORMATIVE_MIN_INCIDENCES <- 50
+
 # ---------------------------------------------------------------------------
 # Data preparation
 # ---------------------------------------------------------------------------
@@ -163,9 +171,9 @@ incidence_sc <- function(n_units, freq) {
 }
 
 #' Per-year incidence sample coverage (the quantity b3gbi::completeness_ts
-#' takes from iNEXT::DataInfo), with the per-year cell count and the size of
-#' the species x cell matrix so that different inclusion rules can be applied
-#' afterwards. Computed from incidence frequencies, so the dense species x
+#' takes from iNEXT::DataInfo), with the per-year cell count, the number of
+#' species x cell incidences and the size of the species x cell matrix so that
+#' different inclusion rules can be applied afterwards. Computed from incidence frequencies, so the dense species x
 #' cell matrix is never built (it can exceed memory at large sites).
 annual_coverage_table <- function(df, taxon_col = TAXON_COL) {
   v <- valid_incidence_rows(df, taxon_col)
@@ -173,7 +181,7 @@ annual_coverage_table <- function(df, taxon_col = TAXON_COL) {
                              stringsAsFactors = FALSE))
   years <- sort(unique(pairs$year))
   out <- data.frame(year = years, n_cells = NA_integer_, n_species = NA_integer_,
-                    matrix_size = NA_real_, sc = NA_real_)
+                    n_incidences = NA_integer_, matrix_size = NA_real_, sc = NA_real_)
   by_year <- split(pairs, pairs$year)
   for (i in seq_along(years)) {
     y <- by_year[[as.character(years[i])]]
@@ -181,6 +189,7 @@ annual_coverage_table <- function(df, taxon_col = TAXON_COL) {
     n_cells <- length(unique(y$cell))
     out$n_cells[i] <- n_cells
     out$n_species[i] <- length(freq)
+    out$n_incidences[i] <- sum(freq)
     out$matrix_size[i] <- as.numeric(length(freq)) * n_cells
     out$sc[i] <- incidence_sc(n_cells, freq)
   }
@@ -191,13 +200,22 @@ annual_coverage_table <- function(df, taxon_col = TAXON_COL) {
 #'   "b3gbi":     years with matrix_size > 5 (b3gbi's cutoff_length rule,
 #'                which counts species x cell elements, not cells)
 #'   "min_cells": years with at least 2 occupied cells and matrix_size > 5
-mean_annual_coverage <- function(tab, rule = c("b3gbi", "min_cells")) {
+#'   "informative": years with at least INFORMATIVE_MIN_CELLS occupied cells and
+#'                INFORMATIVE_MIN_INCIDENCES species x cell incidences
+mean_annual_coverage <- function(tab, rule = c("b3gbi", "min_cells", "informative")) {
   rule <- match.arg(rule)
   keep <- tab$matrix_size > 5
   if (rule == "min_cells") keep <- keep & tab$n_cells >= 2
+  if (rule == "informative") keep <- informative_years(tab)
   vals <- tab$sc[keep]
   if (length(vals) == 0 || all(is.na(vals))) return(NA_real_)
   mean(vals, na.rm = TRUE)
+}
+
+#' Which rows of an annual coverage table are informative years.
+informative_years <- function(tab, min_cells = INFORMATIVE_MIN_CELLS,
+                              min_incidences = INFORMATIVE_MIN_INCIDENCES) {
+  tab$n_cells >= min_cells & tab$n_incidences >= min_incidences
 }
 
 # ---------------------------------------------------------------------------

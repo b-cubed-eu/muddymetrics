@@ -5,6 +5,7 @@
 #   Rscript scripts/summarise_indicators.R --grid 1km --level 0.9
 #   Rscript scripts/summarise_indicators.R --grid 1km --level 0.9 --ci hill_ci_1km_b100.csv
 #   Rscript scripts/summarise_indicators.R --grid 1km --level 0.9 --alpha 0.1   # D6.1's level
+#   Rscript scripts/summarise_indicators.R --in output/indicators_v1b --hill-years all --max-extrapolation Inf
 #
 # For each combination and indicator: number of years, mean, and linear trends
 # fitted three ways:
@@ -17,12 +18,20 @@
 #        gls_w (AR(1) errors, variance proportional to SE^2).
 # Direction is "up"/"down" when p <= alpha (default 0.05), otherwise "none".
 # Hill estimates that iNEXT could not compute at the requested coverage are
-# left out. A fit that fails, or a series with fewer than 3 years, gives NA.
+# left out, and so are, by default, Hill estimates that need more than twice the
+# observed number of cells to reach the coverage level (--max-extrapolation 2;
+# Chao et al. 2014) and years that are not informative (--hill-years
+# informative: at least INFORMATIVE_MIN_CELLS occupied cells and
+# INFORMATIVE_MIN_INCIDENCES incidences, see scripts/lib/sufficiency_criteria.R;
+# "all" keeps every year). The simple indicators keep every year.
+# A fit that fails, or a series with fewer than --min-years years (default 3),
+# gives NA.
 #
-# Output: output/indicators_v1/trends_<grid>_<level>.csv and
-#         trend_direction_<grid>_<level>.csv
+# Input and output folder: --in (default output/indicators_v1).
+# Output: trends_<grid>_<level>.csv and trend_direction_<grid>_<level>.csv
 
 suppressPackageStartupMessages({ library(data.table); library(nlme) })
+source("scripts/lib/sufficiency_criteria.R")   # INFORMATIVE_MIN_CELLS, INFORMATIVE_MIN_INCIDENCES
 arg <- function(flag, default = NULL) {
   a <- commandArgs(trailingOnly = TRUE); i <- match(flag, a)
   if (is.na(i) || i == length(a)) default else a[i + 1]
@@ -31,10 +40,19 @@ GRID <- match.arg(arg("--grid", "1km"), c("100m", "1km"))
 LEVEL <- as.numeric(arg("--level", "0.9"))
 CI_FILE <- arg("--ci")
 ALPHA <- as.numeric(arg("--alpha", "0.05"))
-OUT <- "output/indicators_v1"
+OUT <- arg("--in", "output/indicators_v1")
+HILL_YEARS <- match.arg(arg("--hill-years", "informative"), c("informative", "all"))
+MAX_EXTRAP <- as.numeric(arg("--max-extrapolation", "2"))
+MIN_YEARS_TREND <- as.integer(arg("--min-years", "3"))
 
 simple <- fread(file.path(OUT, "simple.csv"))[grid == GRID]
 hill <- fread(file.path(OUT, "hill.csv"))[grid == GRID & abs(level - LEVEL) < 1e-9 & abs(SC - LEVEL) < 1e-3]
+hill <- hill[t_over_T <= MAX_EXTRAP]
+if (HILL_YEARS == "informative") {
+  if (!"n_incidences" %in% names(simple)) stop("simple.csv has no n_incidences column: re-run run_indicators.R, or use --hill-years all")
+  info <- simple[n_cells >= INFORMATIVE_MIN_CELLS & n_incidences >= INFORMATIVE_MIN_INCIDENCES, .(site_id, subset, year)]
+  hill <- merge(hill, info, by = c("site_id", "subset", "year"))
+}
 magv <- fread(file.path(OUT, "magv_summary.csv"))
 
 long <- suppressWarnings(rbind(
@@ -50,14 +68,14 @@ if (!is.null(CI_FILE)) {
 
 NO_FIT <- list(slope = NA_real_, p = NA_real_)
 fit <- function(v, y, w = NULL) {
-  if (length(v) < 3 || length(unique(v)) < 2) return(NO_FIT)
+  if (length(v) < max(3, MIN_YEARS_TREND) || length(unique(v)) < 2) return(NO_FIT)
   co <- suppressWarnings(summary(if (is.null(w)) lm(v ~ y) else lm(v ~ y, weights = w)))$coefficients
   if (nrow(co) < 2) return(NO_FIT)
   list(slope = co[2, 1], p = co[2, 4])
 }
 # AR(1) errors on the year (gaps allowed); with se, variance proportional to se^2.
 fit_gls <- function(v, y, se = NULL) {
-  if (length(v) < 4 || length(unique(v)) < 2) return(NO_FIT)
+  if (length(v) < max(4, MIN_YEARS_TREND) || length(unique(v)) < 2) return(NO_FIT)
   d <- data.frame(v = v, y = y, s2 = if (is.null(se)) 1 else se^2)
   g <- tryCatch(suppressWarnings(gls(v ~ y, data = d, correlation = corAR1(form = ~ y), method = "REML",
                                      weights = if (is.null(se)) NULL else varFixed(~ s2))),

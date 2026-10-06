@@ -6,13 +6,18 @@
 # apply_sufficiency_thresholds.R):
 #   Rscript scripts/run_indicators.R --cores 8                         # point estimates, all combinations
 #   Rscript scripts/run_indicators.R --cores 8 --mode ci --nboot 100 --grids 1km   # intervals, passing combinations
+#   Rscript scripts/run_indicators.R --screen output/sufficiency_v1b_1km/sufficiency_raw.csv \
+#     --coverage-rule informative --out output/indicators_v1b --sites passing_sites.txt
+#
+# --screen and --coverage-rule set which screen results decide the combinations
+# (default: the 100 m screen with the min_cells rule); --out the output folder.
 #
 # Mode "point": every combination the screen evaluated gets point estimates.
 # Mode "ci": combinations that pass all five criteria under any of the three
 # precision rules (mean, median, D6.1) get bootstrap intervals for the Hill
 # numbers.
 #
-# Output in output/indicators_v1/: simple.csv, hill.csv, hill_ci_<grids>_b<nboot>.csv,
+# Output in output/indicators_v1/ (or --out): simple.csv, hill.csv, hill_ci_<grids>_b<nboot>.csv,
 # magv_by_year.csv, magv_summary.csv, ci_combinations.csv, per-site files in sites/.
 # Resumable: sites with finished files for the chosen mode are skipped.
 
@@ -31,12 +36,14 @@ mode <- match.arg(arg("--mode", "point"), c("point", "ci"))
 grids <- arg("--grids", "100m,1km")
 ci_suffix <- paste0("_hill_ci_", gsub(",", "_", grids), "_b", nboot, ".csv")
 sites_file <- arg("--sites")
-OUT <- "output/indicators_v1"
+OUT <- arg("--out", "output/indicators_v1")
+SCREEN <- arg("--screen", "output/sufficiency_v1/sufficiency_raw.csv")
+COV_RULE <- arg("--coverage-rule", "min_cells")
 
-raw <- read.csv("output/sufficiency_v1/sufficiency_raw.csv", stringsAsFactors = FALSE)
+raw <- read.csv(SCREEN, stringsAsFactors = FALSE)
 evaluated <- raw[raw$status == "computed", c("site_id", "subset")]
 pass <- rbindlist(lapply(c("mean", "median", "d61"), function(pr) {
-  r <- apply_thresholds(raw, coverage_rule = "min_cells", precision_rule = pr)
+  r <- apply_thresholds(raw, coverage_rule = COV_RULE, precision_rule = pr)
   data.table(site_id = r$site_id[r$pass_all], subset = r$subset[r$pass_all], precision_rule = pr)
 }))
 ci_combos <- unique(pass[, .(site_id, subset)])
