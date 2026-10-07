@@ -157,3 +157,62 @@ row_keys <- function(dt, from_year = 2024, to_year = Inf) {
   d <- dt[!is.na(y) & y >= from_year & y <= to_year]
   sort(paste(d$mgrscellcode, d$year, d$specieskey, as.numeric(d$occurrences), sep = "|"))
 }
+
+#' Every site cube file under the ramsar_site_data_100m_* folders of `root`
+#' (the unknown folder included, the update folders left out), as paths
+#' relative to `root`.
+all_cube_files <- function(root) {
+  tops <- list.dirs(root, recursive = FALSE, full.names = FALSE)
+  tops <- tops[grepl("^ramsar_site_data_100m_", tops) & !grepl("world", tops)]
+  unlist(lapply(tops, function(t) file.path(t, list.files(file.path(root, t), pattern = "_data\\.csv$", recursive = TRUE))))
+}
+
+#' Put patched cubes written with --out-dir into place. For each cube in
+#' `from_dir` (same relative paths as under `root`): the cube it replaces is
+#' first copied to `backup_dir` (an existing backup is kept, as it is the older
+#' one) and the copy is verified; the new cube is copied next to its target,
+#' verified, and renamed over it. Other files of the same site elsewhere (the
+#' cube of site 1979 in the unknown folder) are moved to `backup_dir`.
+#' All new cubes are checked to have the cube columns before anything is changed.
+#' Returns one row per cube with what was done.
+install_patched <- function(from_dir, root, backup_dir, dry_run = FALSE) {
+  if (normalizePath(from_dir, mustWork = TRUE) == normalizePath(root, mustWork = TRUE)) stop("--install-from cannot be the data folder itself")
+  new <- list.files(from_dir, pattern = "_data\\.csv$", recursive = TRUE)
+  if (!length(new)) stop("No patched cubes (*_data.csv) in ", from_dir)
+  bad <- new[!vapply(new, function(f) identical(names(data.table::fread(file.path(from_dir, f), nrows = 0)), CUBE_COLS), TRUE)]
+  if (length(bad)) stop("These files do not have the cube columns, nothing was changed: ", paste(utils::head(bad, 10), collapse = ", "))
+  existing <- all_cube_files(root)
+  md5 <- function(f) unname(tools::md5sum(f))
+  backup_of <- function(rel) {
+    b <- file.path(backup_dir, rel)
+    if (file.exists(b)) return("kept existing backup")
+    dir.create(dirname(b), showWarnings = FALSE, recursive = TRUE)
+    if (!file.copy(file.path(root, rel), b, copy.date = TRUE) || md5(b) != md5(file.path(root, rel))) stop("Backup failed for ", rel)
+    "backed up"
+  }
+  log <- vector("list", length(new))
+  for (i in seq_along(new)) {
+    rel <- new[i]; src <- file.path(from_dir, rel); dest <- file.path(root, rel)
+    sid <- site_id_of(rel)
+    strays <- setdiff(existing[!is.na(site_id_of(existing)) & site_id_of(existing) == sid], rel)
+    replaced <- file.exists(dest)
+    if (dry_run) {
+      log[[i]] <- data.table::data.table(site_id = sid, cube = rel, action = if (replaced) "would replace" else "would add",
+                                         backup = NA_character_, verified = NA, strays = paste(strays, collapse = " | "))
+      next
+    }
+    b <- if (replaced) backup_of(rel) else "nothing to back up"
+    tmp <- paste0(dest, ".tmp")
+    dir.create(dirname(dest), showWarnings = FALSE, recursive = TRUE)
+    if (!file.copy(src, tmp, overwrite = TRUE) || md5(tmp) != md5(src)) stop("Copy failed for ", rel)
+    if (replaced && !file.remove(dest)) stop("Could not replace ", dest)
+    if (!file.rename(tmp, dest)) stop("Could not write ", dest, " (the new cube is at ", tmp, ")")
+    for (s in strays) {
+      backup_of(s)
+      if (!file.remove(file.path(root, s))) stop("Could not move ", s, " to the backup folder")
+    }
+    log[[i]] <- data.table::data.table(site_id = sid, cube = rel, action = if (replaced) "replaced" else "added", backup = b,
+                                       verified = md5(dest) == md5(src), strays = paste(strays, collapse = " | "))
+  }
+  data.table::rbindlist(log)
+}

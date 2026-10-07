@@ -216,13 +216,28 @@ test_that("cubes rebuilt by the patch script pass the check", {
   late <- copy(s1[1]); late[, year := "2026"]
   fwrite(rbind(s1, stale, late), file.path(w$cdir, "site_1_One_data.csv")); fwrite(s2, file.path(w$cdir, "site_2_Two_data.csv"))
   file.symlink(file.path(repo, "scripts"), file.path(w$dir, "scripts"))
+  # a second copy of site 1's cube in the unknown folder (as for site 1979): moved away on install
+  unk <- file.path(w$dir, "inst/extdata/ramsar_site_data_100m_unknown/x"); dir.create(unk, recursive = TRUE)
+  file.copy(file.path(w$cdir, "site_1_One_data.csv"), file.path(unk, "site_1_One_data.csv"))
+  orig <- tools::md5sum(file.path(w$cdir, c("site_1_One_data.csv", "site_2_Two_data.csv")))
   ud <- "inst/extdata/ramsar_site_data_100m_world_2024_2026"
-  out <- withr::with_dir(w$dir, system2("Rscript", c("scripts/patch_site_cubes_update.R", "--all",
-           "--update", paste(file.path(ud, c("update.csv", "fish.csv")), collapse = ","), "--update-groups", "all,fish",
-           "--to-year", "2025", "--chunk-lines", "2"), stdout = TRUE, stderr = TRUE))
+  patch <- function(...) withr::with_dir(w$dir, system2("Rscript", c("scripts/patch_site_cubes_update.R", ...), stdout = TRUE, stderr = TRUE))
+  out <- patch("--all", "--out-dir", "_local_data/cube_patch_all",
+               "--update", paste(file.path(ud, c("update.csv", "fish.csv")), collapse = ","), "--update-groups", "all,fish",
+               "--to-year", "2025", "--chunk-lines", "2")
   expect_null(attr(out, "status"))
-  expect_true(file.exists(file.path(w$dir, "_local_data", paste0("cube_backup_", format(Sys.Date(), "%Y%m%d")),
-                                    "ramsar_site_data_100m_europe/Belgium/site_1_One_data.csv")))
+  expect_equal(tools::md5sum(file.path(w$cdir, c("site_1_One_data.csv", "site_2_Two_data.csv"))), orig)   # cubes untouched
+  out <- patch("--install-from", "_local_data/cube_patch_all", "--dry-run")
+  expect_null(attr(out, "status"))
+  expect_equal(tools::md5sum(file.path(w$cdir, c("site_1_One_data.csv", "site_2_Two_data.csv"))), orig)   # still untouched
+  out <- patch("--install-from", "_local_data/cube_patch_all")
+  expect_null(attr(out, "status"))
+  bk <- file.path(w$dir, "_local_data", paste0("cube_backup_", format(Sys.Date(), "%Y%m%d")))
+  expect_equal(unname(tools::md5sum(file.path(bk, "ramsar_site_data_100m_europe/Belgium", c("site_1_One_data.csv", "site_2_Two_data.csv")))), unname(orig))
+  expect_true(file.exists(file.path(bk, "ramsar_site_data_100m_unknown/x/site_1_One_data.csv")))
+  expect_false(file.exists(file.path(unk, "site_1_One_data.csv")))
+  il <- fread(file.path(w$dir, "_local_data/cube_patch_work/install_log.csv"))
+  expect_true(all(il$verified)); expect_setequal(il$action, "replaced")
   rd <- fread(file.path(w$dir, "_local_data/cube_patch_work/update_files_read.csv"))
   expect_equal(rd$rows_other_years, c(2, 0)); expect_equal(rd$rows_other_taxa, c(0, 1))
   run_check(w, "--step", "all", "--tag", "patched")

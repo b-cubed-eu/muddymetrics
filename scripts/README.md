@@ -133,6 +133,15 @@ Two scripts repair this; both copy every file they change to a backup folder fir
      --update <main>,<fish> --update-groups all,fish --to-year 2025
    Rscript scripts/patch_site_cubes_update.R --all --update <main>,<fish> --update-groups all,fish --to-year 2025
    ```
+   or, to check the result before any cube is changed, with the updates read only once:
+   ```
+   Rscript scripts/patch_site_cubes_update.R --all --out-dir _local_data/cube_patch_all --update <main>,<fish> \
+     --update-groups all,fish --to-year 2025
+   Rscript scripts/patch_site_cubes_update.R --install-from _local_data/cube_patch_all --dry-run
+   Rscript scripts/patch_site_cubes_update.R --install-from _local_data/cube_patch_all
+   ```
+   The install step copies each original to the backup folder, verifies the copies, and writes
+   `install_log.csv` in the work folder.
    For cubes that already had the update, the summary reports whether the rows rebuilt from the
    main update are identical apart from reptiles, and how many rows came from the other files.
 2. `harmonise_cube_taxonomy.R` gives the older rows (old backbone, numeric keys) the names and keys

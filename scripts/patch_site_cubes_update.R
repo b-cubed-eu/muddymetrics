@@ -23,6 +23,11 @@
 #   Rscript scripts/patch_site_cubes_update.R                    # only the cubes the update never reached
 #   Rscript scripts/patch_site_cubes_update.R --sites site_67,site_838 --out-dir _local_data/cube_patch_check
 #        # check run: write patched copies elsewhere, leave the cubes untouched
+#   Rscript scripts/patch_site_cubes_update.R --all --out-dir _local_data/cube_patch_all ...
+#   Rscript scripts/patch_site_cubes_update.R --install-from _local_data/cube_patch_all --dry-run
+#   Rscript scripts/patch_site_cubes_update.R --install-from _local_data/cube_patch_all
+#        # patch every cube into a separate folder, check it, then put the cubes into place
+#        # (each original is copied to the backup folder first; nothing is read from the updates)
 #
 # Options:
 #   --update      update cube(s) (tab-separated, 25 columns); several files are given
@@ -42,7 +47,9 @@
 #   --backup-dir  in-place runs copy each original here first [_local_data/cube_backup_<date>]
 #   --work-dir    temporary per-site files [_local_data/cube_patch_work]
 #   --chunk-lines lines read per chunk [2000000]
-#   --dry-run     list the sites that would be patched and stop
+#   --dry-run     list the sites that would be patched (or, with --install-from, the
+#                 cubes that would be replaced) and stop
+#   --install-from  put the cubes of an earlier --out-dir run into place (see above)
 #
 # Outputs (in the work dir): patch_targets.csv (sites and why), patch_summary.csv
 # (rows before and after, per site, and how many came from the second and later
@@ -82,6 +89,21 @@ BACKUP <- arg("--backup-dir", file.path("_local_data", paste0("cube_backup_", fo
 WORK <- arg("--work-dir", "_local_data/cube_patch_work")
 CHUNK <- as.numeric(arg("--chunk-lines", "2e6"))
 ROOT <- "inst/extdata"; WKT_ROOT <- file.path(ROOT, "ramsar_sites_wkt")
+dir.create(WORK, showWarnings = FALSE, recursive = TRUE)
+
+# --- Installing the cubes of an earlier --out-dir run --------------------------------
+INSTALL <- arg("--install-from")
+if (!is.null(INSTALL)) {
+  log <- install_patched(INSTALL, ROOT, BACKUP, dry_run = has("--dry-run"))
+  f <- file.path(WORK, if (has("--dry-run")) "install_plan.csv" else "install_log.csv")
+  fwrite(log, f)
+  print(log[, .N, by = action])
+  if (!has("--dry-run")) cat(sprintf("Cubes in place: %d, all verified: %s. Originals in %s. Log: %s\n",
+                                     nrow(log), all(log$verified), BACKUP, f))
+  if (any(nzchar(log$strays))) { cat("Other files of the same sites, moved to the backup folder:\n"); print(log[nzchar(strays), .(site_id, strays)]) }
+  quit(save = "no")
+}
+
 if (any(!file.exists(UPDATE))) stop("Update file not found: ", paste(UPDATE[!file.exists(UPDATE)], collapse = ", "))
 dir.create(WORK, showWarnings = FALSE, recursive = TRUE)
 
