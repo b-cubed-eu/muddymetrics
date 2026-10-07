@@ -16,7 +16,7 @@ Ramsar site boundaries, GRIIS checklists and GIDIAS impact records under `inst/e
 
 1. Per-site cubes: `split_data_cubes_targeted.R`, `split_data_cubes_remaining.R`; then the 2024-2026
    update and one taxonomy for all years: `patch_site_cubes_update.R`, `harmonise_cube_taxonomy.R`
-   (see "Updating the site cubes" below)
+   (see "Updating the site cubes" below); then `check_site_cubes.R` before any analysis
 2. Data-sufficiency screen: `run_subgroup_data_sufficiency_parallel.R` (calls `worker_subgroup.R`
    and `compute_thresholds.R`), then `global_precision_update.R` and `global_precision_update_corrected.R`
 3. Summary tables: `generate_stats_tables.R`, `final_stats.R`
@@ -143,4 +143,34 @@ Two scripts repair this; both copy every file they change to a backup folder fir
    ```
 
 Functions: `lib/cube_update.R`, `lib/taxonomy_match.R`; tests: `tests/test_cube_update.R`.
+
+## Checking the site cubes before analysis
+
+`check_site_cubes.R` rebuilds, from the sources alone, what every site cube should contain, and
+compares it row by row with the cubes on disk. It never changes a cube. Its code is separate from the
+code that built the cubes, so that an error there is not repeated in the check:
+
+- outlines come from the Ramsar shapefile; the .wkt files are compared with it separately;
+- the continental cubes give the years before 2024 (all of them, for every site), the update files
+  2024 on;
+- every line of every source is accounted for, and every valid cell is tested against every outline
+  (no pre-selection by 100 km square).
+
+A cell belongs to a site when the south-west corner of the 100 m cell (the point
+`mgrs::mgrs_to_latlng()` returns) lies in or on the outline, the rule the cubes were built with.
+
+```
+Rscript scripts/check_site_cubes.R --step inventory                                  # files and outlines (minutes)
+Rscript scripts/check_site_cubes.R --step reference --update <main>,<fish> --cores 8  # read all sources (hours; resumable)
+Rscript scripts/check_site_cubes.R --step compare --tag after_patch
+Rscript scripts/check_site_cubes.R --step report --tag after_patch
+Rscript scripts/check_site_cubes.R --step compare --tag after_taxonomy --name-table _local_data/taxonomy/name_table.csv
+Rscript scripts/check_site_cubes.R --step report --tag after_taxonomy
+```
+
+The reference step is the slow one and is done once; the compare step can be repeated (for example
+after the patch and again after the taxonomy harmonisation, when the reference is renamed with the
+name table before comparing). Output goes to `_local_data/cube_check/`; `REPORT_<tag>.md` explains
+each check and ends with a verdict. Functions: `lib/cube_check.R`, `lib/cube_check_report.R`; tests
+(with a made-up world containing known errors): `tests/test_check_cubes.R`.
 
