@@ -8,9 +8,14 @@
 #   Rscript scripts/run_indicators.R --cores 8 --mode ci --nboot 100 --grids 1km   # intervals, passing combinations
 #   Rscript scripts/run_indicators.R --screen output/sufficiency_v1b_1km/sufficiency_raw.csv \
 #     --coverage-rule informative --out output/indicators_v1b --sites passing_sites.txt
+#   Rscript scripts/run_indicators.R --mode ci --nboot 1000 --grids 1km --years 2024-2025 --out output/indicators_y2425
 #
 # --screen and --coverage-rule set which screen results decide the combinations
 # (default: the 100 m screen with the min_cells rule); --out the output folder.
+# --combos: a CSV with site_id and subset columns; in mode "ci", only these
+# combinations get intervals (for adding combinations to an earlier run).
+# --years: mode "ci" only, e.g. 2024-2025: intervals for these years only (for
+# adding years to an earlier run; each year is estimated on its own).
 #
 # Mode "point": every combination the screen evaluated gets point estimates.
 # Mode "ci": combinations that pass all five criteria under any of the three
@@ -34,11 +39,14 @@ n_cores <- as.integer(arg("--cores", "8"))
 nboot <- as.integer(arg("--nboot", "200"))
 mode <- match.arg(arg("--mode", "point"), c("point", "ci"))
 grids <- arg("--grids", "100m,1km")
-ci_suffix <- paste0("_hill_ci_", gsub(",", "_", grids), "_b", nboot, ".csv")
+YEARS <- arg("--years", "")
+if (nzchar(YEARS) && mode != "ci") stop("--years can only be used with --mode ci")
+ci_suffix <- paste0("_hill_ci_", gsub(",", "_", grids), "_b", nboot, if (nzchar(YEARS)) paste0("_y", YEARS) else "", ".csv")
 sites_file <- arg("--sites")
 OUT <- arg("--out", "output/indicators_v1")
 SCREEN <- arg("--screen", "output/sufficiency_v1/sufficiency_raw.csv")
 COV_RULE <- arg("--coverage-rule", "min_cells")
+COMBOS <- arg("--combos")
 
 raw <- read.csv(SCREEN, stringsAsFactors = FALSE)
 evaluated <- raw[raw$status == "computed", c("site_id", "subset")]
@@ -47,6 +55,7 @@ pass <- rbindlist(lapply(c("mean", "median", "d61"), function(pr) {
   data.table(site_id = r$site_id[r$pass_all], subset = r$subset[r$pass_all], precision_rule = pr)
 }))
 ci_combos <- unique(pass[, .(site_id, subset)])
+if (!is.null(COMBOS)) ci_combos <- unique(fread(COMBOS)[, .(site_id, subset)])
 
 cubes <- discover_site_cubes()
 sites <- data.table(site_id = unique(evaluated$site_id))
@@ -67,15 +76,15 @@ cat(sprintf("Mode %s: %d sites (%d evaluated combinations; %d passing under some
 
 if (nrow(todo) > 0) {
   cl <- makePSOCKcluster(n_cores)
-  st <- parLapplyLB(cl, seq_len(nrow(todo)), function(i, todo, OUT, nboot, mode, grids, ci_suffix) {
+  st <- parLapplyLB(cl, seq_len(nrow(todo)), function(i, todo, OUT, nboot, mode, grids, ci_suffix, YEARS) {
     j <- todo[i, ]
     log <- file.path(OUT, "logs", paste0(j$site_id, "_", mode, ".log"))
     code <- system2("Rscript", c("scripts/worker_indicators.R", j$site_id, shQuote(j$path), shQuote(j$prefix),
-                                 j$subsets, mode, nboot, grids), stdout = log, stderr = log)
+                                 j$subsets, mode, nboot, grids, YEARS), stdout = log, stderr = log)
     ok <- code == 0 && file.exists(paste0(j$prefix, if (mode == "point") "_magv.csv" else ci_suffix))
     if (ok) unlink(log)
     data.frame(site_id = j$site_id, ok = ok, exit_code = code)
-  }, todo = as.data.frame(todo), OUT = OUT, nboot = nboot, mode = mode, grids = grids, ci_suffix = ci_suffix, chunk.size = 1)
+  }, todo = as.data.frame(todo), OUT = OUT, nboot = nboot, mode = mode, grids = grids, ci_suffix = ci_suffix, YEARS = YEARS, chunk.size = 1)
   stopCluster(cl)
   st <- rbindlist(st)
   cat(sprintf("Finished. %d succeeded, %d failed.\n", sum(st$ok), sum(!st$ok)))
