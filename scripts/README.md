@@ -124,11 +124,14 @@ Two scripts repair this; both copy every file they change to a backup folder fir
 
 1. `patch_site_cubes_update.R` rebuilds the rows from 2024 on from the update file, assigning cells
    to sites by intersecting them with the site outlines, as in the original split. Rows before 2024
-   are kept. Several update files can be given comma-separated (the main update, then a download of
-   fish, which the main update does not include). Check first, then run:
+   are kept. Several update files can be given comma-separated, each with the taxa taken from it
+   (`--update-groups`): the main update for all its groups, and the fish from a second download (GBIF
+   download 0014182-260928105237408, which holds all bony vertebrates). `--to-year 2025` leaves out
+   2026, a partial year. Check first, then run:
    ```
-   Rscript scripts/patch_site_cubes_update.R --sites site_67,site_838 --out-dir _local_data/cube_patch_check --update <main>,<fish>
-   Rscript scripts/patch_site_cubes_update.R --all --update <main>,<fish>
+   Rscript scripts/patch_site_cubes_update.R --sites site_67,site_838 --out-dir _local_data/cube_patch_check \
+     --update <main>,<fish> --update-groups all,fish --to-year 2025
+   Rscript scripts/patch_site_cubes_update.R --all --update <main>,<fish> --update-groups all,fish --to-year 2025
    ```
    For cubes that already had the update, the summary reports whether the rows rebuilt from the
    main update are identical apart from reptiles, and how many rows came from the other files.
@@ -161,10 +164,11 @@ A cell belongs to a site when the south-west corner of the 100 m cell (the point
 
 ```
 Rscript scripts/check_site_cubes.R --step inventory                                  # files and outlines (minutes)
-Rscript scripts/check_site_cubes.R --step reference --update <main>,<fish> --cores 8  # read all sources (hours; resumable)
-Rscript scripts/check_site_cubes.R --step compare --tag after_patch
+Rscript scripts/check_site_cubes.R --step reference --update <main>,<fish> --update-groups all,fish --to-year 2025 --cores 8
+                                                     # read all sources (hours; resumable)
+Rscript scripts/check_site_cubes.R --step compare --tag after_patch --to-year 2025
 Rscript scripts/check_site_cubes.R --step report --tag after_patch
-Rscript scripts/check_site_cubes.R --step compare --tag after_taxonomy --name-table _local_data/taxonomy/name_table.csv
+Rscript scripts/check_site_cubes.R --step compare --tag after_taxonomy --to-year 2025 --name-table _local_data/taxonomy/name_table.csv
 Rscript scripts/check_site_cubes.R --step report --tag after_taxonomy
 ```
 

@@ -416,22 +416,27 @@ chk_bucket_of <- function(site_id, n_buckets) as.integer(sub("^site_", "", site_
 #' Read one byte range of a source file and write, for every site, the rows
 #' whose cell lies in the site, to <part_dir>/bucket_NNN.tsv (site_id + the
 #' 25 cube columns, as read). `role` is "before" (keep years < from_year, the
-#' continental cubes) or "from" (keep years >= from_year, the update files).
+#' continental cubes) or "from" (keep years from_year to to_year, the update
+#' files). `groups`: taxon subsets (lib/sufficiency_criteria.R) to keep, or
+#' "all"; the classes of the rows left out are counted, so the report shows
+#' what a taxon filter removed.
 #' Writes <part_dir>/done.csv with the counts when the range is finished; a
 #' folder without it is from an interrupted run and is renamed, not reused.
 chk_reference_part <- function(path, role, part, start, end, outlines, from_year, part_dir, n_buckets = 50,
-                               chunk_lines = 1e6) {
+                               chunk_lines = 1e6, to_year = Inf, groups = "all") {
   done <- file.path(part_dir, "done.csv")
   if (file.exists(done)) {
     d <- data.table::fread(done)
-    if (d$n_buckets != n_buckets || d$from_year != from_year)
-      stop(part_dir, " was made with other settings (buckets ", d$n_buckets, ", from year ", d$from_year, "): use another --out folder")
+    if (d$n_buckets != n_buckets || d$from_year != from_year || d$to_year != to_year || d$groups != paste(groups, collapse = "+"))
+      stop(part_dir, " was made with other settings (buckets ", d$n_buckets, ", years ", d$from_year, "-", d$to_year,
+           ", taxa ", d$groups, "): use another --out folder")
     return(d)
   }
   if (dir.exists(part_dir)) file.rename(part_dir, paste0(part_dir, "_incomplete_", format(Sys.time(), "%Y%m%d%H%M%S")))
   dir.create(part_dir, recursive = TRUE)
   st <- list(n_empty = 0, n_wrong_fields = 0, n_bad_utf8 = 0, n_invalid_code = 0, n_no_coords = 0,
-             rows_in_sites = 0, rows_kept = 0, rows_other_period = 0, examples = character())
+             rows_in_sites = 0, rows_kept = 0, rows_other_period = 0, rows_other_taxa = 0, examples = character())
+  other_classes <- list()
   t0 <- Sys.time()
   r <- chk_read_range(path, start, end, chunk_lines = chunk_lines, on_chunk = function(lines) {
     p <- chk_parse_lines(lines)
@@ -444,9 +449,14 @@ chk_reference_part <- function(path, role, part, start, end, outlines, from_year
     if (!nrow(a$pairs)) return(invisible())
     m <- merge(a$pairs, p$rows, by = "mgrscellcode", allow.cartesian = TRUE)
     y <- suppressWarnings(as.numeric(m$year))
-    keep <- if (role == "before") !is.na(y) & y < from_year else !is.na(y) & y >= from_year
+    keep <- if (role == "before") !is.na(y) & y < from_year else !is.na(y) & y >= from_year & y <= to_year
+    in_taxa <- if ("all" %in% groups) rep(TRUE, nrow(m)) else in_subsets(m, groups)
     st$rows_in_sites <<- st$rows_in_sites + nrow(m)
-    st$rows_kept <<- st$rows_kept + sum(keep); st$rows_other_period <<- st$rows_other_period + sum(!keep)
+    st$rows_other_period <<- st$rows_other_period + sum(!keep)
+    st$rows_other_taxa <<- st$rows_other_taxa + sum(keep & !in_taxa)
+    if (any(keep & !in_taxa)) other_classes[[length(other_classes) + 1]] <<- m[keep & !in_taxa, .N, by = .(class)]
+    keep <- keep & in_taxa
+    st$rows_kept <<- st$rows_kept + sum(keep)
     m <- m[keep, c("site_id", CHK_COLS), with = FALSE]
     if (!nrow(m)) return(invisible())
     b <- chk_bucket_of(m$site_id, n_buckets)
@@ -455,13 +465,17 @@ chk_reference_part <- function(path, role, part, start, end, outlines, from_year
       data.table::fwrite(m[b == bb], f, sep = "\t", quote = FALSE, append = file.exists(f))
     }
   })
+  oc <- data.table::rbindlist(other_classes)
+  oc <- if (nrow(oc)) oc[, .(N = sum(N)), by = class][order(-N)] else oc
   out <- data.table::data.table(source = path, role = role, part = part, start = start, end = end,
-                                n_buckets = n_buckets, from_year = from_year,
+                                n_buckets = n_buckets, from_year = from_year, to_year = to_year,
+                                groups = paste(groups, collapse = "+"),
                                 first = r$first, after = r$after, lines = r$lines,
                                 n_empty = st$n_empty, n_wrong_fields = st$n_wrong_fields, n_bad_utf8 = st$n_bad_utf8,
                                 n_invalid_code = st$n_invalid_code, n_no_coords = st$n_no_coords,
                                 rows_in_sites = st$rows_in_sites, rows_kept = st$rows_kept,
-                                rows_other_period = st$rows_other_period,
+                                rows_other_period = st$rows_other_period, rows_other_taxa = st$rows_other_taxa,
+                                other_taxa_classes = paste(sprintf("%s:%d", oc$class, oc$N), collapse = "|"),
                                 wrong_field_examples = paste(substr(st$examples, 1, 300), collapse = " || "),
                                 minutes = as.numeric(difftime(Sys.time(), t0, units = "mins")))
   tmp <- paste0(done, ".tmp"); data.table::fwrite(out, tmp); file.rename(tmp, done)
@@ -488,4 +502,14 @@ chk_read_cube <- function(files) {
     if (length(miss)) stop("Cube ", f, " lacks columns: ", paste(miss, collapse = ", "))
     data.table::fread(f, select = CHK_COLS, colClasses = "character", showProgress = FALSE)[, CHK_COLS, with = FALSE]
   }))
+}
+
+#' Add up "class:count|class:count" strings (classes left out by a taxon filter).
+chk_sum_classes <- function(x) {
+  x <- x[!is.na(x) & nzchar(x)]
+  if (!length(x)) return("")
+  p <- strsplit(unlist(strsplit(x, "|", fixed = TRUE)), ":", fixed = TRUE)
+  d <- data.table::data.table(class = vapply(p, function(z) paste(z[-length(z)], collapse = ":"), ""),
+                              n = as.numeric(vapply(p, function(z) z[length(z)], "")))[, .(n = sum(n)), by = class][order(-n)]
+  paste(sprintf("%s:%s", d$class, format(d$n, scientific = FALSE, trim = TRUE)), collapse = "|")
 }

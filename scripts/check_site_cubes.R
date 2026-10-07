@@ -10,8 +10,9 @@
 #   - years before --from-year (2024): the continental cubes
 #     (inst/extdata/continental_gbif_data/*_100m_mgrs_all.csv), all of them
 #     for every site, so data filed under a neighbouring continent is found too;
-#   - years from --from-year on: the update files given with --update (the
-#     2024-2026 update and the fish download).
+#   - years from --from-year to --to-year: the update files given with --update
+#     (the 2024-2026 update and the fish download, from which only the fish are
+#     taken with --update-groups all,fish).
 #
 # A cell belongs to a site when the point mgrs::mgrs_to_latlng() returns for it
 # (the south-west corner of the 100 m cell) lies in or on the site outline
@@ -22,7 +23,8 @@
 # scripts/lib/cube_check.R), and the script never deletes or changes a cube.
 #
 # Usage (from the repository root):
-#   Rscript scripts/check_site_cubes.R --step all --update <main update>,<fish download>
+#   Rscript scripts/check_site_cubes.R --step all --update <main update>,<fish download> \
+#     --update-groups all,fish --to-year 2025
 #   Rscript scripts/check_site_cubes.R --step inventory          # files and outlines only (minutes)
 #   Rscript scripts/check_site_cubes.R --step reference --update <main>,<fish> --cores 8
 #        # reads all sources once (hours); resumable, each finished byte range is kept
@@ -40,7 +42,10 @@
 #   --continental   folder with the continental cubes [inst/extdata/continental_gbif_data]
 #   --update        comma-separated update files [the 2024-2026 update in
 #                   inst/extdata/ramsar_site_data_100m_world_2024_2026]
+#   --update-groups one entry per update file: taxon subsets taken from it, "all" for
+#                   every row, several joined with "+" [all for every file]
 #   --from-year     first year taken from the update files [2024]
+#   --to-year       last year taken from the update files [no limit]
 #   --cores         parallel processes for the reference step [6]
 #   --compare-cores parallel processes for the compare step [4]
 #   --part-gb       size of the byte ranges sources are read in [2]
@@ -71,6 +76,11 @@ WKT_DIR <- arg("--wkt-dir", file.path(ROOT, "ramsar_sites_wkt"))
 CONT_DIR <- arg("--continental", file.path(ROOT, "continental_gbif_data"))
 UPDATE <- trimws(strsplit(arg("--update", file.path(ROOT, "ramsar_site_data_100m_world_2024_2026", "0074420-260519110011954.csv")), ",")[[1]])
 FROM <- as.integer(arg("--from-year", "2024"))
+TO <- as.numeric(arg("--to-year", "Inf"))
+UGROUPS <- trimws(strsplit(arg("--update-groups", paste(rep("all", length(UPDATE)), collapse = ",")), ",")[[1]])
+if (length(UGROUPS) != length(UPDATE)) stop("--update-groups needs one entry per update file")
+bad <- setdiff(unlist(strsplit(UGROUPS, "+", fixed = TRUE)), c("all", ALL_SUBSETS))
+if (length(bad)) stop("Unknown taxon subset in --update-groups: ", paste(bad, collapse = ", "))
 CORES <- as.integer(arg("--cores", "6")); CCORES <- as.integer(arg("--compare-cores", "4"))
 PART_BYTES <- as.numeric(arg("--part-gb", "2")) * 1024^3
 CHUNK <- as.numeric(arg("--chunk-lines", "1e6"))
@@ -80,8 +90,10 @@ NAME_TABLE <- arg("--name-table")
 SITES <- arg("--sites")
 REF_DIR <- file.path(OUT, "reference"); CMP_DIR <- file.path(OUT, paste0("compare_", TAG))
 dir.create(OUT, showWarnings = FALSE, recursive = TRUE)
-settings <- data.table(setting = c("out", "shapefile", "wkt_dir", "continental", "update", "from_year", "buckets", "tag", "name_table"),
-                       value = c(OUT, SHP, WKT_DIR, CONT_DIR, paste(UPDATE, collapse = ","), FROM, NB, TAG, if (is.null(NAME_TABLE)) "" else NAME_TABLE))
+settings <- data.table(setting = c("out", "shapefile", "wkt_dir", "continental", "update", "update_groups", "from_year", "to_year",
+                                   "buckets", "tag", "name_table"),
+                       value = c(OUT, SHP, WKT_DIR, CONT_DIR, paste(UPDATE, collapse = ","), paste(UGROUPS, collapse = ","), FROM, TO,
+                                 NB, TAG, if (is.null(NAME_TABLE)) "" else NAME_TABLE))
 say <- function(...) cat(format(Sys.time(), "%H:%M:%S"), sprintf(...), "\n")
 
 # --- inventory: files, outlines ------------------------------------------------
@@ -109,8 +121,8 @@ if (STEP %in% c("reference", "all")) {
   cont <- list.files(CONT_DIR, pattern = "_100m_mgrs_all\\.csv$", full.names = TRUE)
   if (!length(cont)) stop("No continental cubes (*_100m_mgrs_all.csv) in ", CONT_DIR)
   if (any(!file.exists(UPDATE))) stop("Update file not found: ", paste(UPDATE[!file.exists(UPDATE)], collapse = ", "))
-  src <- rbind(data.table(path = cont, role = "before"), data.table(path = UPDATE, role = "from"))
-  plan <- rbindlist(lapply(seq_len(nrow(src)), function(i) cbind(chk_plan_parts(src$path[i], PART_BYTES), role = src$role[i])))
+  src <- rbind(data.table(path = cont, role = "before", groups = "all"), data.table(path = UPDATE, role = "from", groups = UGROUPS))
+  plan <- rbindlist(lapply(seq_len(nrow(src)), function(i) cbind(chk_plan_parts(src$path[i], PART_BYTES), role = src$role[i], groups = src$groups[i])))
   plan[, part_dir := file.path(REF_DIR, sprintf("%s_part%04d", tools::file_path_sans_ext(basename(path)), part))]
   plan[, eol_bytes := vapply(path, chk_eol_bytes, 1L)]
   plan[, final_eol := vapply(path, chk_final_eol, TRUE)]
@@ -121,16 +133,17 @@ if (STEP %in% c("reference", "all")) {
   if (nrow(todo)) {
     cl <- makePSOCKcluster(CORES)
     res <- tryCatch({
-      clusterExport(cl, c("OUT", "FROM", "NB", "CHUNK"))
+      clusterExport(cl, c("OUT", "FROM", "TO", "NB", "CHUNK"))
       clusterEvalQ(cl, {
         suppressPackageStartupMessages({ library(data.table); library(sf); library(mgrs); library(stringi) })
-        source("scripts/lib/cube_check.R")
+        source("scripts/lib/sufficiency_criteria.R"); source("scripts/lib/cube_check.R")
         outlines <- readRDS(file.path(OUT, "outlines.rds"))
         NULL
       })
       parLapplyLB(cl, seq_len(nrow(todo)), function(i, todo) {
         t <- todo[i]
-        tryCatch(chk_reference_part(t$path, t$role, t$part, t$start, t$end, outlines, FROM, t$part_dir, NB, CHUNK),
+        tryCatch(chk_reference_part(t$path, t$role, t$part, t$start, t$end, outlines, FROM, t$part_dir, NB, CHUNK,
+                                    to_year = TO, groups = strsplit(t$groups, "+", fixed = TRUE)[[1]]),
                  error = function(e) data.table(source = t$path, part = t$part, error = conditionMessage(e)))
       }, todo = todo, chunk.size = 1)
     }, finally = stopCluster(cl))
@@ -147,7 +160,9 @@ if (STEP %in% c("reference", "all")) {
   fwrite(parts, file.path(REF_DIR, "sources_parts.csv"))
   fwrite(merge(parts[, lapply(.SD, sum), by = .(source, role),
                      .SDcols = c("lines", "n_empty", "n_wrong_fields", "n_bad_utf8", "n_invalid_code", "n_no_coords",
-                                 "rows_in_sites", "rows_kept", "rows_other_period", "minutes")], til, by = "source"),
+                                 "rows_in_sites", "rows_kept", "rows_other_period", "rows_other_taxa", "minutes")][
+                 parts[, .(groups = groups[1], other_taxa_classes = chk_sum_classes(other_taxa_classes)), by = source], on = "source"],
+               til, by = "source"),
          file.path(REF_DIR, "sources.csv"))
   fwrite(settings, file.path(REF_DIR, "settings.csv"))
   say("All sources read; read completely: %s", paste(til$read_completely, collapse = ","))
@@ -163,9 +178,10 @@ if (STEP %in% c("compare", "all")) {
   ids <- unique(c(outlines$site_id, cubes$site_id[!is.na(cubes$site_id)]))
   if (!is.null(SITES)) ids <- intersect(ids, if (file.exists(SITES)) trimws(readLines(SITES)) else trimws(strsplit(SITES, ",")[[1]]))
   rs <- fread(file.path(REF_DIR, "sources_parts.csv"))
-  if (any(rs$n_buckets != NB) || any(rs$from_year != FROM))
-    stop("The reference was built with --buckets ", paste(unique(rs$n_buckets), collapse = ","), " and --from-year ",
-         paste(unique(rs$from_year), collapse = ","), "; use the same settings for the compare step.")
+  if (any(rs$n_buckets != NB) || any(rs$from_year != FROM) || any(rs$to_year != TO))
+    stop("The reference was built with --buckets ", paste(unique(rs$n_buckets), collapse = ","), ", --from-year ",
+         paste(unique(rs$from_year), collapse = ","), " and --to-year ", paste(unique(rs$to_year), collapse = ","),
+         "; use the same settings for the compare step.")
   buckets <- sort(unique(chk_bucket_of(ids, NB)))
   # A bucket is redone when it has no result yet, when its result lacks some of the sites asked for
   # (an earlier run with --sites), or when one of its cubes changed after the result was written.

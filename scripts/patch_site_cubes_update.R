@@ -17,8 +17,9 @@
 # Usage (from the repository root):
 #   Rscript scripts/patch_site_cubes_update.R --dry-run          # list the sites only
 #   Rscript scripts/patch_site_cubes_update.R --all              # rebuild 2024+ in every cube (recommended)
-#   Rscript scripts/patch_site_cubes_update.R --all --update <main update>.csv,<fish download>.csv
-#        # the same, adding the groups of a second download
+#   Rscript scripts/patch_site_cubes_update.R --all --update <main update>.csv,<fish download>.csv \
+#     --update-groups all,fish --to-year 2025
+#        # the same, adding the fish of a second download, years 2024-2025 only
 #   Rscript scripts/patch_site_cubes_update.R                    # only the cubes the update never reached
 #   Rscript scripts/patch_site_cubes_update.R --sites site_67,site_838 --out-dir _local_data/cube_patch_check
 #        # check run: write patched copies elsewhere, leave the cubes untouched
@@ -28,7 +29,12 @@
 #                 comma-separated, e.g. the main update followed by a download of
 #                 groups it does not cover (fish)
 #                 [inst/extdata/ramsar_site_data_100m_world_2024_2026/0074420-260519110011954.csv]
+#   --update-groups  comma-separated, one per update file: the taxon subsets
+#                 (lib/sufficiency_criteria.R) taken from that file, "all" for every row,
+#                 several joined with "+" (e.g. aves+mammalia) [all for every file]
 #   --from-year   first year taken from the update [2024]
+#   --to-year     last year taken from the update; later rows, in the update or in
+#                 the existing cube, are left out [no limit]
 #   --all         rebuild every site cube, not only those that lack the update
 #   --sites       comma-separated site ids, or a file with one per line: patch these
 #                 sites whether or not they need it (for checks)
@@ -55,6 +61,7 @@
 
 suppressPackageStartupMessages({ library(data.table); library(sf); library(mgrs); library(stringi) })
 source("scripts/lib/cube_update.R")
+source("scripts/lib/sufficiency_criteria.R")   # ALL_SUBSETS, in_subsets(), for --update-groups
 
 arg <- function(flag, default = NULL) {
   a <- commandArgs(trailingOnly = TRUE); i <- match(flag, a)
@@ -63,6 +70,12 @@ arg <- function(flag, default = NULL) {
 has <- function(flag) flag %in% commandArgs(trailingOnly = TRUE)
 UPDATE <- trimws(strsplit(arg("--update", "inst/extdata/ramsar_site_data_100m_world_2024_2026/0074420-260519110011954.csv"), ",")[[1]])
 FROM <- as.integer(arg("--from-year", "2024"))
+TO <- as.numeric(arg("--to-year", "Inf"))
+GROUPS <- trimws(strsplit(arg("--update-groups", paste(rep("all", length(UPDATE)), collapse = ",")), ",")[[1]])
+if (length(GROUPS) != length(UPDATE)) stop("--update-groups needs one entry per update file")
+GROUPS <- lapply(strsplit(GROUPS, "+", fixed = TRUE), trimws)
+bad <- setdiff(unlist(GROUPS), c("all", ALL_SUBSETS))
+if (length(bad)) stop("Unknown taxon subset in --update-groups: ", paste(bad, collapse = ", "))
 SITES <- arg("--sites")
 OUT_DIR <- arg("--out-dir")
 BACKUP <- arg("--backup-dir", file.path("_local_data", paste0("cube_backup_", format(Sys.Date(), "%Y%m%d"))))
@@ -133,10 +146,22 @@ old_tmp <- list.files(tmp_dir, recursive = TRUE, full.names = TRUE)
 if (length(old_tmp)) stop("Work folder ", tmp_dir, " is not empty (from an earlier run?). Empty it and run again.")
 cell_site <- data.table(mgrscellcode = character(), site_id = character())
 seen <- data.table(mgrscellcode = character(), key = "mgrscellcode")   # cells already assigned
+read_stats <- list()
 for (k in seq_along(UPDATE)) {
   kdir <- file.path(tmp_dir, k); dir.create(kdir, showWarnings = FALSE)
-  cat(sprintf("Reading update file %d of %d: %s\n", k, length(UPDATE), UPDATE[k]))
+  cat(sprintf("Reading update file %d of %d: %s (taxa: %s; years %d to %s)\n", k, length(UPDATE), UPDATE[k],
+              paste(GROUPS[[k]], collapse = "+"), FROM, format(TO)))
+  st <- c(rows_in_squares = 0, rows_other_years = 0, rows_other_taxa = 0, rows_kept = 0)
   n_lines <- stream_update(UPDATE[k], sq, chunk_lines = CHUNK, on_chunk = function(dt) {
+    st["rows_in_squares"] <<- st["rows_in_squares"] + nrow(dt)
+    y <- suppressWarnings(as.numeric(dt$year))
+    in_years <- !is.na(y) & y >= FROM & y <= TO
+    in_taxa <- if ("all" %in% GROUPS[[k]]) rep(TRUE, nrow(dt)) else in_subsets(dt, GROUPS[[k]])
+    st["rows_other_years"] <<- st["rows_other_years"] + sum(!in_years)
+    st["rows_other_taxa"] <<- st["rows_other_taxa"] + sum(in_years & !in_taxa)
+    dt <- dt[in_years & in_taxa]
+    st["rows_kept"] <<- st["rows_kept"] + nrow(dt)
+    if (!nrow(dt)) return(invisible())
     cells <- data.table(mgrscellcode = unique(dt$mgrscellcode))
     new_cells <- cells[!seen, on = "mgrscellcode"]$mgrscellcode
     if (length(new_cells)) {
@@ -149,8 +174,12 @@ for (k in seq_along(UPDATE)) {
       fwrite(m[m$site_id == s, CUBE_COLS, with = FALSE], f, append = file.exists(f))
     }
   })
-  cat(sprintf("Read %s lines from %s.\n", format(n_lines, big.mark = ","), UPDATE[k]))
+  cat(sprintf("Read %s lines from %s. In the sites' 100 km squares: %s rows, of which %s from other years and %s from other taxa were left out.\n",
+              format(n_lines, big.mark = ","), UPDATE[k], format(st["rows_in_squares"], big.mark = ","),
+              format(st["rows_other_years"], big.mark = ","), format(st["rows_other_taxa"], big.mark = ",")))
+  read_stats[[k]] <- data.table(file = UPDATE[k], taxa = paste(GROUPS[[k]], collapse = "+"), lines = n_lines, t(st))
 }
+fwrite(rbindlist(read_stats), file.path(WORK, "update_files_read.csv"))
 empty_cube <- function() data.table(matrix(character(), 0, length(CUBE_COLS), dimnames = list(NULL, CUBE_COLS)))
 read_new <- function(site_id, k) {
   nf <- file.path(tmp_dir, k, paste0(site_id, ".csv"))
@@ -179,7 +208,7 @@ for (i in seq_len(nrow(targets))) {
   # update; see the header)?
   had_update <- nrow(old) && !needs_patch_rows(old, FROM)
   main <- patched_rows(old, new_by_file[[1]], FROM)
-  same_as_existing <- if (had_update) identical(row_keys(old[old$class != "Reptilia"], FROM), row_keys(main[main$class != "Reptilia"], FROM)) else NA
+  same_as_existing <- if (had_update) identical(row_keys(old[old$class != "Reptilia"], FROM, TO), row_keys(main[main$class != "Reptilia"], FROM, TO)) else NA
   dest <- if (is.null(OUT_DIR)) t$file_path else file.path(OUT_DIR, sub(paste0("^", ROOT, "/?"), "", t$file_path))
   dir.create(dirname(dest), showWarnings = FALSE, recursive = TRUE)
   if (is.null(OUT_DIR) && file.exists(src)) {

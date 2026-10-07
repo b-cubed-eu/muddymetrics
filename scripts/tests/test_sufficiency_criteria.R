@@ -57,6 +57,11 @@ test_that("fish include chordates without a class (old backbone) but no other gr
                    kingdom = "Animalia")
   expect_equal(which(rownames(df) %in% rownames(subset_taxon(df, "fish"))), c(1, 2, 3, 4, 8))
   expect_error(subset_taxon(df[, c("phylum", "class", "kingdom")], "fish"))   # needs order
+  # the classes of the new backbone in the fish download
+  nb <- data.frame(phylum = "Chordata", order = "x", kingdom = "Animalia",
+                   class = c("Teleostei", "Elasmobranchii", "Chondrostei", "Holostei", "Holocephali", "Petromyzonti",
+                             "Myxini", "Dipneusti", "Cladistii", "Aves", "Mammalia", "Reptilia", "Amphibia"))
+  expect_equal(subset_taxon(nb, "fish")$class, nb$class[1:9])
 })
 
 test_that("full is no longer screened by default but can still be asked for", {

@@ -65,15 +65,23 @@ chk_write_report <- function(out, tag, from_year) {
   add("## 2. Source files", "")
   if (!is.null(src)) {
     s <- src[, .(file = basename(source), role = ifelse(role == "before", paste("years before", from_year), paste(from_year, "on")),
-                 lines, read_completely, wrong_fields = n_wrong_fields, empty = n_empty,
+                 taxa = groups, lines, read_completely, wrong_fields = n_wrong_fields, empty = n_empty,
                  invalid_cell = n_invalid_code, no_coordinates = n_no_coords, rows_in_sites = rows_kept,
-                 rows_other_years = rows_other_period, hours = round(minutes / 60, 1))]
+                 rows_other_years = rows_other_period, rows_other_taxa, hours = round(minutes / 60, 1))]
     add(tab(s), "",
         "`read_completely` says the byte ranges were read without gaps or overlaps, to the end of the file.",
         "`wrong_fields` are lines that are not 25 tab-separated fields; they cannot be placed and would be missing",
         "from any cube. `invalid_cell` and `no_coordinates` count cell codes (once per block of lines read) that are not valid 100 m MGRS",
         "codes or could not be converted. `rows_other_years` are rows in a site from the other period (continental",
-        sprintf("rows from %d on, update rows before %d); they are left out of the cubes by design.", from_year, from_year), "")
+        sprintf("rows from %d on, update rows outside the update years); they are left out of the cubes by design.", from_year),
+        "`rows_other_taxa` are rows of an update file outside its `taxa`; the classes left out are listed below, so",
+        "that a class missing from a taxon definition shows up here.", "")
+    oc <- src[nzchar(other_taxa_classes)]
+    for (i in seq_len(nrow(oc))) {
+      cl <- strsplit(strsplit(oc$other_taxa_classes[i], "|", fixed = TRUE)[[1]], ":", fixed = TRUE)
+      add(sprintf("Classes left out of %s (rows in the sites):", basename(oc$source[i])), "",
+          tab(data.table::data.table(class = vapply(cl, `[`, "", 1), rows = as.numeric(vapply(cl, function(z) z[length(z)], "")))), "")
+    }
     if (!all(src$read_completely)) verdict <- c(verdict, "a source file was not read completely")
     if (sum(src$n_wrong_fields)) verdict <- c(verdict, "source lines that could not be read")
   } else add("The reference step has not been run.", "")

@@ -73,8 +73,10 @@ world <- function() {
           row("Anas a", "101", "Aves", 2019, "notacell"))                           # invalid cell code
   as <- c(hdr, row("Bufo b", "303", "Amphibia", 2020, c1))                          # site 1 data filed under another continent
   up <- c(hdr, row("Anas a", "7CYVX", "Aves", 2024, c1, 2), row("Natrix n", "RT9", "Reptilia", 2025, c1b),
-          row("Anas a", "7CYVX", "Aves", 2023, c1))                                 # update before 2024: left out
-  fish <- c(hdr, row("Salmo t", "FSH1", "Actinopterygii", 2024, c2))
+          row("Anas a", "7CYVX", "Aves", 2023, c1),                                 # update before 2024: left out
+          row("Anas a", "7CYVX", "Aves", 2026, c1))                                 # after --to-year 2025: left out
+  fish <- c(hdr, row("Salmo t", "FSH1", "Teleostei", 2024, c2),
+            row("Anas a", "7CYVX", "Aves", 2024, c2))                               # not a fish: left out by --update-groups
   cd <- file.path(ex, "continental_gbif_data"); dir.create(cd)
   writeLines(eu, file.path(cd, "europe_100m_mgrs_all.csv")); writeLines(as, file.path(cd, "asia_100m_mgrs_all.csv"))
   writeLines(eu[1:3], file.path(cd, "asia_1km_mgrs_all.csv"))                         # not a 100 m cube: ignored
@@ -101,6 +103,7 @@ run_check <- function(w, ...) {
   repo <- normalizePath(file.path(here, ".."))
   args <- c(file.path(repo, "scripts/check_site_cubes.R"), "--root", file.path(w$dir, "inst/extdata"), "--out", file.path(w$dir, "check"),
             "--update", paste(file.path(w$dir, "inst/extdata/ramsar_site_data_100m_world_2024_2026", c("update.csv", "fish.csv")), collapse = ","),
+            "--update-groups", "all,fish", "--to-year", "2025",
             "--cores", "2", "--compare-cores", "1", "--part-gb", "3e-7", "--buckets", "3", ...)
   out <- withr::with_dir(repo, system2("Rscript", args, stdout = TRUE, stderr = TRUE))
   status <- attr(out, "status")
@@ -129,7 +132,9 @@ test_that("the check finds every planted error and nothing else", {
   expect_equal(src[basename(source) == "europe_100m_mgrs_all.csv"]$n_invalid_code, 1)
   expect_equal(src[basename(source) == "europe_100m_mgrs_all.csv"]$n_no_coords, 1)
   expect_equal(src[basename(source) == "europe_100m_mgrs_all.csv"]$rows_other_period, 1)
-  expect_equal(src[basename(source) == "update.csv"]$rows_other_period, 1)
+  expect_equal(src[basename(source) == "update.csv"]$rows_other_period, 2)
+  expect_equal(src[basename(source) == "fish.csv"]$rows_other_taxa, 1)
+  expect_equal(src[basename(source) == "fish.csv"]$other_taxa_classes, "Aves:1")
   st <- fread(file.path(ck, "compare_t1/sites.csv"))
   s1 <- st[site_id == "site_1"]; s2 <- st[site_id == "site_2"]; s3 <- st[site_id == "site_3"]
   expect_equal(s1$rows_ref, nrow(w$site1))
@@ -149,8 +154,10 @@ test_that("the check finds every planted error and nothing else", {
   rep <- readLines(file.path(ck, "REPORT_t1.md"))
   expect_true(any(grepl("Not ready for analysis", rep)))
   expect_true(any(grepl("cubes that differ from their sources (1)", rep, fixed = TRUE)))
+  expect_true(any(grepl("Classes left out of fish.csv", rep, fixed = TRUE)))
   # a second run reuses everything and gives the same answer
   run_check(w, "--step", "compare", "--tag", "t1")
+  setindex(st, NULL)
   expect_equal(fread(file.path(ck, "compare_t1/sites.csv")), st)
   # a cube that changes afterwards is compared again under the same tag
   Sys.sleep(1)
@@ -196,4 +203,30 @@ test_that("merging by the name table sums occurrences and keeps the smallest unc
   expect_equal(nrow(h), 1)
   expect_equal(h$occurrences, "5"); expect_equal(h$mincoordinateuncertaintyinmeters, "100"); expect_equal(h$mintemporaluncertainty, "60")
   expect_equal(h$species, "Curruca curruca")
+})
+
+test_that("cubes rebuilt by the patch script pass the check", {
+  skip_if_not_installed("withr")
+  w <- world()
+  repo <- normalizePath(file.path(here, ".."))
+  # cubes as the continental cubes made them (years before 2024), with one stale old-backbone 2024 row and a
+  # 2026 row that the patch must remove
+  s1 <- w$site1[as.numeric(year) < 2024]; s2 <- w$site2[as.numeric(year) < 2024]
+  stale <- copy(s1[1]); stale[, year := "2024"]
+  late <- copy(s1[1]); late[, year := "2026"]
+  fwrite(rbind(s1, stale, late), file.path(w$cdir, "site_1_One_data.csv")); fwrite(s2, file.path(w$cdir, "site_2_Two_data.csv"))
+  file.symlink(file.path(repo, "scripts"), file.path(w$dir, "scripts"))
+  ud <- "inst/extdata/ramsar_site_data_100m_world_2024_2026"
+  out <- withr::with_dir(w$dir, system2("Rscript", c("scripts/patch_site_cubes_update.R", "--all",
+           "--update", paste(file.path(ud, c("update.csv", "fish.csv")), collapse = ","), "--update-groups", "all,fish",
+           "--to-year", "2025", "--chunk-lines", "2"), stdout = TRUE, stderr = TRUE))
+  expect_null(attr(out, "status"))
+  expect_true(file.exists(file.path(w$dir, "_local_data", paste0("cube_backup_", format(Sys.Date(), "%Y%m%d")),
+                                    "ramsar_site_data_100m_europe/Belgium/site_1_One_data.csv")))
+  rd <- fread(file.path(w$dir, "_local_data/cube_patch_work/update_files_read.csv"))
+  expect_equal(rd$rows_other_years, c(2, 0)); expect_equal(rd$rows_other_taxa, c(0, 1))
+  run_check(w, "--step", "all", "--tag", "patched")
+  st <- fread(file.path(w$dir, "check/compare_patched/sites.csv"))[site_id %in% c("site_1", "site_2")]
+  expect_equal(st$rows_cube, c(nrow(w$site1), nrow(w$site2)))
+  expect_equal(st$rows_same, st$rows_ref); expect_equal(st$rows_same, st$rows_cube)
 })

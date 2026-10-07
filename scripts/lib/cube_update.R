@@ -128,7 +128,6 @@ stream_update <- function(path, squares, on_chunk, chunk_lines = 2e6, progress =
     if (any(keep)) {
       dt <- data.table::fread(text = paste0(paste(lines[keep], collapse = "\n"), "\n"), sep = "\t", header = FALSE, quote = "",
                               colClasses = "character", col.names = CUBE_COLS, fill = TRUE, showProgress = FALSE)
-      dt <- dt[!is.na(dt$mincoordinateuncertaintyinmeters) & nzchar(dt$mincoordinateuncertaintyinmeters)]
       on_chunk(dt)
     }
     if (progress) cat(sprintf("  %s lines read (%.1f min)\n", format(n, big.mark = ",", scientific = FALSE), as.numeric(difftime(Sys.time(), t0, units = "mins"))))
@@ -151,10 +150,10 @@ patched_rows <- function(old, new, from_year = 2024) {
   rbind(keep, new)
 }
 
-#' Rows from `from_year` on as comparable keys (cell, year, species key, occurrences).
-row_keys <- function(dt, from_year = 2024) {
+#' Rows from `from_year` to `to_year` as comparable keys (cell, year, species key, occurrences).
+row_keys <- function(dt, from_year = 2024, to_year = Inf) {
   dt <- data.table::as.data.table(dt)
   y <- suppressWarnings(as.integer(dt$year))
-  d <- dt[!is.na(y) & y >= from_year]
+  d <- dt[!is.na(y) & y >= from_year & y <= to_year]
   sort(paste(d$mgrscellcode, d$year, d$specieskey, as.numeric(d$occurrences), sep = "|"))
 }

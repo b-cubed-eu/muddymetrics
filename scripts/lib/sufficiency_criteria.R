@@ -30,9 +30,13 @@ HERP_CLASSES <- c("Amphibia", "Reptilia", "Squamata", "Testudines",
 # Fish: jawless, cartilaginous and bony fishes. The old GBIF backbone gives
 # ray-finned fishes no class (their orders sit directly under Chordata), so
 # chordates without a class are counted as fish too, except the one non-fish
-# order found without a class in the cubes (Copelata, larvaceans).
-FISH_CLASSES <- c("Actinopterygii", "Sarcopterygii", "Dipneusti", "Coelacanthi", "Elasmobranchii",
-                  "Holocephali", "Chondrichthyes", "Petromyzonti", "Myxini", "Cephalaspidomorphi")
+# order found without a class in the cubes (Copelata, larvaceans). The new
+# backbone splits ray-finned fishes into Teleostei, Holostei, Chondrostei and
+# Cladistii; these are the fish classes found in the fish download
+# (0014182-260928105237408) and in the old-backbone cubes.
+FISH_CLASSES <- c("Actinopterygii", "Teleostei", "Holostei", "Chondrostei", "Cladistii",
+                  "Sarcopterygii", "Dipneusti", "Coelacanthi", "Elasmobranchii", "Holocephali",
+                  "Chondrichthyes", "Petromyzonti", "Myxini", "Cephalaspidomorphi")
 NON_FISH_ORDERS <- "Copelata"
 
 TAXON_COL <- "species"
