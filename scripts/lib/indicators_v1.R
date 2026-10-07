@@ -52,13 +52,18 @@ simple_indicators <- function(df, grid = c("100m", "1km")) {
 #' Hill numbers (q = 0, 1, 2) per year at a fixed sample coverage.
 #' Years are kept when the species x cell matrix has more than `cutoff_length`
 #' elements; b3gbi's workflow passes cutoff_length = 5 for the Hill numbers. nboot = 0 gives no intervals.
+#' `years`: compute only these years (each year is estimated on its own, so the
+#' result for a year does not depend on which other years are computed).
+#' `seed`: with nboot > 0, the random seed for each year and q is seed + 10 * year + q,
+#' so intervals can be reproduced year by year.
 #' Returns one row per year and q: estimate, interval, the sample size (cells)
 #' needed to reach the coverage level (t), the observed sample (T), their
 #' ratio and iNEXT's method label (Rarefaction / Observed / Extrapolation).
 hill_indicators <- function(df, grid = c("100m", "1km"), level = 0.95, q = c(0, 1, 2),
-                            nboot = 0, conf = 0.95, cutoff_length = 5) {
+                            nboot = 0, conf = 0.95, cutoff_length = 5, years = NULL, seed = 20260922) {
   v <- indicator_rows(df, grid)
   inc <- yearly_incidence_freq(v)
+  if (!is.null(years)) inc <- inc[names(inc) %in% as.character(years)]
   keep <- vapply(inc, function(z) as.numeric(length(z$freq)) * z$T > cutoff_length, logical(1))
   empty <- data.frame(year = numeric(), q = numeric(), qD = numeric(), qD.LCL = numeric(),
                       qD.UCL = numeric(), t = numeric(), T = numeric(), t_over_T = numeric(),
@@ -72,6 +77,7 @@ hill_indicators <- function(df, grid = c("100m", "1km"), level = 0.95, q = c(0, 
   one <- function(nm, qq) {
     run <- function(nb) suppressWarnings(b3gbi:::my_estimateD(x[nm], datatype = "incidence_freq",
       base = "coverage", level = level, q = qq, conf = conf, nboot = nb))
+    if (nboot > 0) set.seed(seed + 10 * as.numeric(nm) + qq)
     e <- tryCatch(run(nboot), error = function(err) NULL)
     ci <- if (nboot == 0) "none" else "ok"
     if (is.null(e)) { e <- run(0); ci <- "failed" }

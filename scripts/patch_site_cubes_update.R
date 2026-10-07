@@ -17,12 +17,16 @@
 # Usage (from the repository root):
 #   Rscript scripts/patch_site_cubes_update.R --dry-run          # list the sites only
 #   Rscript scripts/patch_site_cubes_update.R --all              # rebuild 2024+ in every cube (recommended)
+#   Rscript scripts/patch_site_cubes_update.R --all --update <main update>.csv,<fish download>.csv
+#        # the same, adding the groups of a second download
 #   Rscript scripts/patch_site_cubes_update.R                    # only the cubes the update never reached
 #   Rscript scripts/patch_site_cubes_update.R --sites site_67,site_838 --out-dir _local_data/cube_patch_check
 #        # check run: write patched copies elsewhere, leave the cubes untouched
 #
 # Options:
-#   --update      update cube (tab-separated, 25 columns)
+#   --update      update cube(s) (tab-separated, 25 columns); several files are given
+#                 comma-separated, e.g. the main update followed by a download of
+#                 groups it does not cover (fish)
 #                 [inst/extdata/ramsar_site_data_100m_world_2024_2026/0074420-260519110011954.csv]
 #   --from-year   first year taken from the update [2024]
 #   --all         rebuild every site cube, not only those that lack the update
@@ -35,8 +39,9 @@
 #   --dry-run     list the sites that would be patched and stop
 #
 # Outputs (in the work dir): patch_targets.csv (sites and why), patch_summary.csv
-# (rows before and after, per site), and for already-updated sites in a check run
-# whether the rebuilt rows are identical to the existing ones.
+# (rows before and after, per site, and how many came from the second and later
+# update files), and for already-updated sites whether the rows rebuilt from the
+# first update file are identical to the existing ones.
 #
 # The update also dropped all reptiles (class Reptilia in the new backbone) from
 # the cubes it did reach, apparently through a class list with the old-backbone
@@ -56,7 +61,7 @@ arg <- function(flag, default = NULL) {
   if (is.na(i) || i == length(a)) default else a[i + 1]
 }
 has <- function(flag) flag %in% commandArgs(trailingOnly = TRUE)
-UPDATE <- arg("--update", "inst/extdata/ramsar_site_data_100m_world_2024_2026/0074420-260519110011954.csv")
+UPDATE <- trimws(strsplit(arg("--update", "inst/extdata/ramsar_site_data_100m_world_2024_2026/0074420-260519110011954.csv"), ",")[[1]])
 FROM <- as.integer(arg("--from-year", "2024"))
 SITES <- arg("--sites")
 OUT_DIR <- arg("--out-dir")
@@ -64,7 +69,7 @@ BACKUP <- arg("--backup-dir", file.path("_local_data", paste0("cube_backup_", fo
 WORK <- arg("--work-dir", "_local_data/cube_patch_work")
 CHUNK <- as.numeric(arg("--chunk-lines", "2e6"))
 ROOT <- "inst/extdata"; WKT_ROOT <- file.path(ROOT, "ramsar_sites_wkt")
-if (!file.exists(UPDATE)) stop("Update file not found: ", UPDATE)
+if (any(!file.exists(UPDATE))) stop("Update file not found: ", paste(UPDATE[!file.exists(UPDATE)], collapse = ", "))
 dir.create(WORK, showWarnings = FALSE, recursive = TRUE)
 
 # --- 1. Site cubes and the ones to patch ---------------------------------------
@@ -121,26 +126,36 @@ outlines <- read_site_outlines(targets$site_id, targets$wkt)
 sq <- unique(unlist(lapply(seq_len(nrow(outlines)), function(i) site_squares(sf::st_geometry(outlines)[i]))))
 cat(sprintf("%d MGRS 100 km squares to search.\n", length(sq)))
 
-# --- 3. Stream the update --------------------------------------------------------
+# --- 3. Stream the update file(s) ---------------------------------------------------
+# Rows from each update file go to their own folder (site_rows/1, site_rows/2, ...).
 tmp_dir <- file.path(WORK, "site_rows"); dir.create(tmp_dir, showWarnings = FALSE)
-old_tmp <- list.files(tmp_dir, full.names = TRUE)
+old_tmp <- list.files(tmp_dir, recursive = TRUE, full.names = TRUE)
 if (length(old_tmp)) stop("Work folder ", tmp_dir, " is not empty (from an earlier run?). Empty it and run again.")
 cell_site <- data.table(mgrscellcode = character(), site_id = character())
 seen <- data.table(mgrscellcode = character(), key = "mgrscellcode")   # cells already assigned
-n_lines <- stream_update(UPDATE, sq, chunk_lines = CHUNK, on_chunk = function(dt) {
-  cells <- data.table(mgrscellcode = unique(dt$mgrscellcode))
-  new_cells <- cells[!seen, on = "mgrscellcode"]$mgrscellcode
-  if (length(new_cells)) {
-    cell_site <<- rbind(cell_site, assign_cells(new_cells, outlines))
-    seen <<- rbind(seen, data.table(mgrscellcode = new_cells)); setkey(seen, mgrscellcode)
-  }
-  m <- merge(dt, cell_site, by = "mgrscellcode", allow.cartesian = TRUE)
-  for (s in unique(m$site_id)) {
-    f <- file.path(tmp_dir, paste0(s, ".csv"))
-    fwrite(m[m$site_id == s, CUBE_COLS, with = FALSE], f, append = file.exists(f))
-  }
-})
-cat(sprintf("Read %s lines from the update.\n", format(n_lines, big.mark = ",")))
+for (k in seq_along(UPDATE)) {
+  kdir <- file.path(tmp_dir, k); dir.create(kdir, showWarnings = FALSE)
+  cat(sprintf("Reading update file %d of %d: %s\n", k, length(UPDATE), UPDATE[k]))
+  n_lines <- stream_update(UPDATE[k], sq, chunk_lines = CHUNK, on_chunk = function(dt) {
+    cells <- data.table(mgrscellcode = unique(dt$mgrscellcode))
+    new_cells <- cells[!seen, on = "mgrscellcode"]$mgrscellcode
+    if (length(new_cells)) {
+      cell_site <<- rbind(cell_site, assign_cells(new_cells, outlines))
+      seen <<- rbind(seen, data.table(mgrscellcode = new_cells)); setkey(seen, mgrscellcode)
+    }
+    m <- merge(dt, cell_site, by = "mgrscellcode", allow.cartesian = TRUE)
+    for (s in unique(m$site_id)) {
+      f <- file.path(kdir, paste0(s, ".csv"))
+      fwrite(m[m$site_id == s, CUBE_COLS, with = FALSE], f, append = file.exists(f))
+    }
+  })
+  cat(sprintf("Read %s lines from %s.\n", format(n_lines, big.mark = ","), UPDATE[k]))
+}
+empty_cube <- function() data.table(matrix(character(), 0, length(CUBE_COLS), dimnames = list(NULL, CUBE_COLS)))
+read_new <- function(site_id, k) {
+  nf <- file.path(tmp_dir, k, paste0(site_id, ".csv"))
+  if (file.exists(nf)) fread(nf, colClasses = "character", showProgress = FALSE) else empty_cube()
+}
 
 # --- 4. Rebuild each site cube -------------------------------------------------------
 summ <- list()
@@ -149,21 +164,22 @@ for (i in seq_len(nrow(targets))) {
   src <- t$source_file
   old <- if (file.exists(src)) fread(src, colClasses = "character", showProgress = FALSE) else data.table()
   if (t$reason == "misplaced in unknown folder") old <- old[0]       # update rows only; rebuilt below
-  nf <- file.path(tmp_dir, paste0(t$site_id, ".csv"))
-  new <- if (file.exists(nf)) fread(nf, colClasses = "character", showProgress = FALSE) else data.table()
-  if (!nrow(new)) new <- data.table(matrix(character(), 0, length(CUBE_COLS), dimnames = list(NULL, CUBE_COLS)))
-  if (!nrow(old)) old <- data.table(matrix(character(), 0, length(CUBE_COLS), dimnames = list(NULL, CUBE_COLS)))
+  new_by_file <- lapply(seq_along(UPDATE), function(k) read_new(t$site_id, k))
+  new <- rbindlist(new_by_file)
+  if (!nrow(old)) old <- empty_cube()
   if (!nrow(new) && !sum(suppressWarnings(as.integer(old$year)) >= FROM, na.rm = TRUE) && t$reason != "misplaced in unknown folder") {
     summ[[i]] <- data.table(site_id = t$site_id, continent = t$continent, country = t$country, reason = "unchanged (no rows from the update year on, before or after)",
                             file = t$file_path, rows_before = nrow(old), rows_before_from = 0L, rows_update = 0L, rows_after = nrow(old),
-                            occ_before_from = 0, occ_after_from = 0, reptile_rows_added = 0L, same_as_existing = NA)
+                            rows_update_extra = 0L, occ_before_from = 0, occ_after_from = 0, reptile_rows_added = 0L, same_as_existing = NA)
     next
   }
   res <- patched_rows(old, new, FROM)
-  # For cubes that already had the update: are the rebuilt rows the same as before,
-  # apart from reptiles (dropped by the June 2026 update; see the header)?
+  # For cubes that already had the update: are the rows rebuilt from the first
+  # update file the same as before, apart from reptiles (dropped by the June 2026
+  # update; see the header)?
   had_update <- nrow(old) && !needs_patch_rows(old, FROM)
-  same_as_existing <- if (had_update) identical(row_keys(old[old$class != "Reptilia"], FROM), row_keys(res[res$class != "Reptilia"], FROM)) else NA
+  main <- patched_rows(old, new_by_file[[1]], FROM)
+  same_as_existing <- if (had_update) identical(row_keys(old[old$class != "Reptilia"], FROM), row_keys(main[main$class != "Reptilia"], FROM)) else NA
   dest <- if (is.null(OUT_DIR)) t$file_path else file.path(OUT_DIR, sub(paste0("^", ROOT, "/?"), "", t$file_path))
   dir.create(dirname(dest), showWarnings = FALSE, recursive = TRUE)
   if (is.null(OUT_DIR) && file.exists(src)) {
@@ -179,7 +195,7 @@ for (i in seq_len(nrow(targets))) {
   yr <- function(d) { y <- suppressWarnings(as.integer(d$year)); y }
   summ[[i]] <- data.table(site_id = t$site_id, continent = t$continent, country = t$country, reason = t$reason,
                           file = dest, rows_before = nrow(old), rows_before_from = sum(yr(old) >= FROM, na.rm = TRUE),
-                          rows_update = nrow(new), rows_after = nrow(res),
+                          rows_update = nrow(new), rows_update_extra = nrow(new) - nrow(new_by_file[[1]]), rows_after = nrow(res),
                           occ_before_from = sum(as.numeric(old$occurrences[yr(old) >= FROM]), na.rm = TRUE),
                           occ_after_from = sum(as.numeric(res$occurrences[yr(res) >= FROM]), na.rm = TRUE),
                           reptile_rows_added = sum(res$class == "Reptilia" & yr(res) >= FROM) - sum(old$class == "Reptilia" & yr(old) >= FROM),
@@ -198,4 +214,5 @@ if (any(!is.na(summ$same_as_existing))) {
   if (any(summ$same_as_existing == FALSE, na.rm = TRUE)) print(summ[same_as_existing == FALSE, .(site_id, rows_before_from, rows_update)])
 }
 cat("Summary:", file.path(WORK, "patch_summary.csv"), "\n")
+if (length(UPDATE) > 1) cat(sprintf("Rows from the second and later update files: %s.\n", format(sum(summ$rows_update_extra), big.mark = ",")))
 cat("The per-site rows in", tmp_dir, "can be deleted once the result is checked.\n")

@@ -15,13 +15,25 @@
 # into two species; counting by name does not. TAXON_COL can be set to
 # "specieskey" to reproduce key-based results.
 
-SUBSETS <- c("full", "aves", "mammalia", "herps", "insects", "plants")
+# Taxon subsets screened by default. "full" (all taxa together) is still
+# available on request, but it is not a consistent group over time: the
+# 2024-2026 update covers only the groups below.
+SUBSETS <- c("aves", "mammalia", "herps", "insects", "plants", "fish")
+ALL_SUBSETS <- c("full", SUBSETS)
 
 # The cubes use the GBIF backbone, where reptiles are split into Squamata,
 # Testudines, Crocodylia and Rhynchocephalia. "Reptilia" is kept in case an
 # older backbone version appears.
 HERP_CLASSES <- c("Amphibia", "Reptilia", "Squamata", "Testudines",
-                  "Crocodylia", "Rhynchocephalia")
+                  "Crocodylia", "Rhynchocephalia", "Sphenodontia")
+
+# Fish: jawless, cartilaginous and bony fishes. The old GBIF backbone gives
+# ray-finned fishes no class (their orders sit directly under Chordata), so
+# chordates without a class are counted as fish too, except the one non-fish
+# order found without a class in the cubes (Copelata, larvaceans).
+FISH_CLASSES <- c("Actinopterygii", "Sarcopterygii", "Dipneusti", "Coelacanthi", "Elasmobranchii",
+                  "Holocephali", "Chondrichthyes", "Petromyzonti", "Myxini", "Cephalaspidomorphi")
+NON_FISH_ORDERS <- "Copelata"
 
 TAXON_COL <- "species"
 MIN_ROWS <- 10      # subsets with fewer cube rows are not evaluated
@@ -66,18 +78,30 @@ recode_grid <- function(df, grid = c("100m", "1km")) {
 }
 
 #' Rows belonging to a taxonomic subset. Uses %in% so that missing class or
-#' kingdom values are excluded rather than producing NA rows.
+#' kingdom values are excluded rather than producing NA rows (except for fish,
+#' where a chordate without a class is a ray-finned fish in the old backbone).
 subset_taxon <- function(df, subset) {
-  keep <- switch(subset,
+  df[subset_mask(df, subset), , drop = FALSE]
+}
+
+#' TRUE for the rows of df that belong to any of `subsets`.
+in_subsets <- function(df, subsets = SUBSETS) {
+  Reduce(`|`, lapply(subsets, function(s) subset_mask(df, s)), rep(FALSE, nrow(df)))
+}
+
+subset_mask <- function(df, subset) {
+  if (subset == "fish" && (is.null(df$phylum) || is.null(df$order))) stop("The fish subset needs phylum and order columns")
+  switch(subset,
     full     = rep(TRUE, nrow(df)),
     aves     = df$class %in% "Aves",
     mammalia = df$class %in% "Mammalia",
     herps    = df$class %in% HERP_CLASSES,
     insects  = df$class %in% "Insecta",
     plants   = df$kingdom %in% "Plantae",
+    fish     = df$phylum %in% "Chordata" & (df$class %in% FISH_CLASSES |
+                 ((is.na(df$class) | df$class == "") & !df$order %in% NON_FISH_ORDERS)),
     stop("Unknown subset: ", subset)
   )
-  df[keep, , drop = FALSE]
 }
 
 #' Rows usable for incidence-based estimators: taxon and cell both present.

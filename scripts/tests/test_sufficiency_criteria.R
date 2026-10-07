@@ -46,7 +46,23 @@ test_that("taxon subsets include reptile classes and exclude missing class", {
   expect_false(anyNA(subset_taxon(df, "aves")$class))
   df2 <- data.frame(class = c("Magnoliopsida", NA), kingdom = c("Plantae", "Plantae"))
   expect_equal(nrow(subset_taxon(df2, "plants")), 2)
-  expect_error(subset_taxon(df, "fish"))
+  expect_error(subset_taxon(df, "fish"))            # no phylum column
+  expect_error(subset_taxon(df, "trees"))
+})
+
+test_that("fish include chordates without a class (old backbone) but no other groups", {
+  df <- data.frame(phylum = c("Chordata", "Chordata", "Chordata", "Chordata", "Chordata", "Arthropoda", "Chordata", "Chordata", "Chordata"),
+                   class = c("", NA, "Elasmobranchii", "Actinopterygii", "Aves", "", "Ascidiacea", "Petromyzonti", ""),
+                   order = c("Perciformes", "Salmoniformes", "Rajiformes", "Perciformes", "Anseriformes", "Araneae", "Stolidobranchia", "Petromyzontiformes", "Copelata"),
+                   kingdom = "Animalia")
+  expect_equal(which(rownames(df) %in% rownames(subset_taxon(df, "fish"))), c(1, 2, 3, 4, 8))
+  expect_error(subset_taxon(df[, c("phylum", "class", "kingdom")], "fish"))   # needs order
+})
+
+test_that("full is no longer screened by default but can still be asked for", {
+  expect_false("full" %in% SUBSETS)
+  expect_setequal(SUBSETS, c("aves", "mammalia", "herps", "insects", "plants", "fish"))
+  expect_true(all(c("full", SUBSETS) %in% ALL_SUBSETS))
 })
 
 test_that("year filter keeps 1990 onwards and drops missing years", {
@@ -462,4 +478,9 @@ test_that("Hill numbers from frequencies equal b3gbi's hill*_ts on the 100 m gri
   expect_equal(ci$qD, ours$qD)
   expect_true(all(ci$qD.LCL[ci$ci_status == "ok"] <= ci$qD[ci$ci_status == "ok"] + 1e-9))
   expect_true(all(is.na(ci$qD.LCL[ci$ci_status == "failed"])))
+  # selected years: identical to the same years of a run over all years, intervals included
+  part <- hill_indicators(rows, "100m", level = 0.95, nboot = 20, years = 2003:2004)
+  expect_equal(sort(unique(part$year)), c(2003, 2004))
+  expect_equal(part, ci[ci$year %in% 2003:2004, ], ignore_attr = TRUE)
+  expect_equal(nrow(hill_indicators(rows, "100m", level = 0.95, years = 1990)), 0)
 })

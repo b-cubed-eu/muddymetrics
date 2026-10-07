@@ -37,6 +37,10 @@ A single worker computes all criteria for every site x taxon combination, from r
 onwards (`--last-year 2023` drops later years). Thresholds are applied in a separate step, so they can be varied
 without recomputing.
 
+The taxon subsets are birds, mammals, herpetofauna, insects, plants and fish. All taxa together
+("full") is no longer screened by default, since the 2024-2026 update covers only these groups;
+`--subsets full,aves,...` still includes it.
+
     Rscript scripts/run_sufficiency.R --cores 8            # writes output/sufficiency_v1/sufficiency_raw.csv
     Rscript scripts/run_sufficiency.R --cores 8 --grid 1km # the same on 1 km cells, in output/sufficiency_v1_1km/
     Rscript scripts/apply_sufficiency_thresholds.R         # writes sufficiency_results.csv, sites_passing.csv
@@ -67,8 +71,9 @@ them the estimated annual coverage is too often 0.90 or more while the true cove
 
 A criterion that cannot be computed (for example Chao2 with fewer than two occupied cells) counts as a
 fail. Species are identified by scientific name, because the cubes carry two GBIF key systems and the
-same species can appear under two keys. Herpetofauna includes Amphibia, Squamata, Testudines,
-Crocodylia and Rhynchocephalia.
+same species can appear under two keys. Herpetofauna includes Amphibia, Reptilia, Squamata, Testudines,
+Crocodylia and Rhynchocephalia. Fish are chordates in the fish classes (`FISH_CLASSES`) plus chordates
+without a class, which in the old GBIF backbone are the ray-finned fishes.
 
 The threshold step also prints how many combinations pass under each coverage and precision rule.
 
@@ -95,9 +100,15 @@ could be computed. 1 km cells are the MGRS 1 km squares containing the 100 m cel
 
 By default `summarise_indicators.R` keeps Hill estimates only from informative years and only where reaching the
 coverage level needs at most twice the observed number of cells (`--hill-years all --max-extrapolation Inf`
-keeps all), and `--to-year 2023` ends the series in 2023. `--in` selects the indicator folder; `run_indicators.R` takes
-`--screen`, `--coverage-rule` and `--out` so the indicators can follow another screen run.
-It fits each annual series by ordinary least squares and by generalised
+keeps all), and `--to-year 2023` ends the series in 2023. `--in` selects the indicator folder.
+
+`run_indicators.R` takes `--screen`, `--coverage-rule` and `--out` so the indicators can follow another
+screen run. Two options add to an earlier interval run: `--combos` (a CSV of site_id and subset)
+computes intervals for particular combinations, and `--years 2024-2025` for particular years only.
+Each year is estimated on its own, with its own random seed, so intervals for added years are the
+same as in a run over all years.
+
+`summarise_indicators.R` fits each annual series by ordinary least squares and by generalised
 least squares with AR(1) errors (REML, `nlme::gls`), and, with `--ci`, both again with each year
 weighted by its bootstrap variance. A trend counts as up or down when p ≤ `--alpha` (default 0.05).
 `check_multiverse.R` compares the Hill-number verdicts across Hill orders, grids, coverage levels and
@@ -113,16 +124,18 @@ Two scripts repair this; both copy every file they change to a backup folder fir
 
 1. `patch_site_cubes_update.R` rebuilds the rows from 2024 on from the update file, assigning cells
    to sites by intersecting them with the site outlines, as in the original split. Rows before 2024
-   are kept. Check first, then run:
+   are kept. Several update files can be given comma-separated (the main update, then a download of
+   fish, which the main update does not include). Check first, then run:
    ```
-   Rscript scripts/patch_site_cubes_update.R --sites site_67,site_838 --out-dir _local_data/cube_patch_check
-   Rscript scripts/patch_site_cubes_update.R --all
+   Rscript scripts/patch_site_cubes_update.R --sites site_67,site_838 --out-dir _local_data/cube_patch_check --update <main>,<fish>
+   Rscript scripts/patch_site_cubes_update.R --all --update <main>,<fish>
    ```
-   For cubes that already had the update, the summary reports whether the rebuilt rows are identical
-   apart from reptiles.
+   For cubes that already had the update, the summary reports whether the rows rebuilt from the
+   main update are identical apart from reptiles, and how many rows came from the other files.
 2. `harmonise_cube_taxonomy.R` gives the older rows (old backbone, numeric keys) the names and keys
    of the new backbone, so that a species keeps one name across years. It builds a name table (from
-   the update rows, then the GBIF species-match API; needs internet, resumable) and applies it:
+   the update rows, then the GBIF species-match API; needs internet, resumable) and applies it.
+   Only names in the screened taxon groups are matched (`--groups all` matches every name):
    ```
    Rscript scripts/harmonise_cube_taxonomy.R --build --limit 200
    Rscript scripts/harmonise_cube_taxonomy.R --build

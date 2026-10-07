@@ -10,6 +10,7 @@ suppressPackageStartupMessages({ library(data.table); library(sf); library(mgrs)
 here <- if (file.exists("scripts/lib/cube_update.R")) "scripts" else ".."
 source(file.path(here, "lib/cube_update.R"))
 source(file.path(here, "lib/taxonomy_match.R"))
+source(file.path(here, "lib/sufficiency_criteria.R"))
 fixture <- function(f) paste(readLines(file.path(here, "tests/fixtures", f), warn = FALSE), collapse = "")
 
 cube_row <- function(species, key, year, cell, occ = 1, unc = 1000, kingdom = "Animalia", cls = "Aves") {
@@ -146,4 +147,15 @@ test_that("harmonise_rows renames old-backbone rows and merges the duplicates th
   expect_equal(r[species == "Xyzus fakeus"]$specieskey, "999")   # unmatched names keep their old name and key
   expect_equal(sort(unique(r$species)), c("Curruca curruca", "Xyzus fakeus"))
   expect_equal(nrow(r), 4)
+})
+
+test_that("only names in the screened groups are matched", {
+  old <- data.table(kingdom = c("Animalia", "Animalia", "Animalia", "Plantae", "Fungi", "Animalia", "Animalia"),
+                    phylum = c("Chordata", "Chordata", "Chordata", "Tracheophyta", "Basidiomycota", "Mollusca", "Chordata"),
+                    class = c("Aves", "", "Squamata", "Magnoliopsida", "Agaricomycetes", "Gastropoda", "Elasmobranchii"),
+                    order = c("Anseriformes", "Salmoniformes", "Squamata", "Poales", "Agaricales", "Stylommatophora", "Rajiformes"),
+                    species = c("A a", "Salmo trutta", "Natrix natrix", "P p", "F f", "M m", "Raja clavata"))
+  expect_equal(old[in_subsets(old)]$species, c("A a", "Salmo trutta", "Natrix natrix", "P p", "Raja clavata"))
+  expect_equal(old[in_subsets(old, c("aves", "plants"))]$species, c("A a", "P p"))
+  expect_equal(nrow(old[in_subsets(old[0])]), 0)
 })

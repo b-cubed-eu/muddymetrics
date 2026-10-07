@@ -4,40 +4,44 @@
 # see apply_sufficiency_thresholds.R.
 #
 # Usage (from the repository root):
-#   Rscript scripts/worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid] [last_year]
+#   Rscript scripts/worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid] [last_year] [subsets]
 #
 # grid is "100m" (default, the cube's native cells) or "1km". Only the
 # criteria that use grid cells as sampling units change with the grid: Chao2
 # completeness and annual coverage. Density, temporal decoupling and precision
-# do not depend on it. last_year (default: none) drops records after that year.
+# do not depend on it. last_year (default: none, "Inf") drops records after that year.
+# subsets is a comma-separated list (default: SUBSETS in lib/sufficiency_criteria.R;
+# "full" is also accepted).
 #
 # The cube path is passed explicitly by the runner, so the worker never looks
 # files up by name.
 
 args <- commandArgs(trailingOnly = TRUE)
-if (!length(args) %in% 5:7) {
-  cat("Usage: worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid] [last_year]\n")
+if (!length(args) %in% 5:8) {
+  cat("Usage: worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid] [last_year] [subsets]\n")
   quit(status = 1)
 }
 cont <- args[1]; country <- args[2]; site_id <- args[3]
 cube_path <- args[4]; out_file <- args[5]
 grid <- if (length(args) >= 6) args[6] else "100m"
-last_year <- if (length(args) == 7) as.numeric(args[7]) else Inf
+last_year <- if (length(args) >= 7) as.numeric(args[7]) else Inf
 
 suppressPackageStartupMessages({
   library(data.table)
   library(sf)
 })
 source("scripts/lib/sufficiency_criteria.R")
+subsets <- if (length(args) == 8) strsplit(args[8], ",")[[1]] else SUBSETS
+stopifnot(all(subsets %in% ALL_SUBSETS))
 
 WKT_ROOT <- "inst/extdata/ramsar_sites_wkt"
 t0 <- Sys.time()
 
-cols <- c("kingdom", "class", "species", "specieskey", "mgrscellcode", "year",
+cols <- c("kingdom", "phylum", "class", "order", "species", "specieskey", "mgrscellcode", "year",
           "occurrences", "mincoordinateuncertaintyinmeters")
 df_all <- as.data.frame(data.table::fread(
   cube_path, select = cols, showProgress = FALSE,
-  colClasses = list(character = c("kingdom", "class", "species", "specieskey", "mgrscellcode"),
+  colClasses = list(character = c("kingdom", "phylum", "class", "order", "species", "specieskey", "mgrscellcode"),
                     numeric = c("year", "occurrences", "mincoordinateuncertaintyinmeters"))))
 df <- recode_grid(filter_years(df_all, last_year = last_year), grid)
 
@@ -48,7 +52,7 @@ area <- if (length(wkt_files) >= 1) {
 
 prec_d61 <- precision_ratio_d61(df_all, area)
 
-rows <- lapply(SUBSETS, function(subset) {
+rows <- lapply(subsets, function(subset) {
   sub <- subset_taxon(df, subset)
   base <- list(continent = cont, country = country, site_id = site_id, subset = subset, grid = grid,
                n_rows = nrow(sub), n_occurrences = sum(sub$occurrences, na.rm = TRUE),

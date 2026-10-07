@@ -9,6 +9,8 @@
 #   1. Build the name table (needs internet; resumable):
 #        Rscript scripts/harmonise_cube_taxonomy.R --build --limit 200   # first a small test
 #        Rscript scripts/harmonise_cube_taxonomy.R --build               # then all names
+#      Only names in the screened taxon groups are matched (birds, mammals,
+#      herptiles, insects, plants and fish; --groups all matches every name).
 #      Each old (kingdom, species) gets the accepted species of the new backbone:
 #      names that occur in the update rows are taken from there, all others are
 #      matched with the GBIF species-match API (v2, checklist
@@ -28,6 +30,8 @@
 #   --build | --apply | --report
 #   --limit N        --build: match at most N names via the API in this run
 #   --connections N  --build: parallel API requests [4]
+#   --groups         --build: comma-separated taxon subsets whose names are matched,
+#                    or "all" [SUBSETS in lib/sufficiency_criteria.R]
 #   --sites          --apply: comma-separated site ids, or a file with one per line
 #   --out-dir        --apply: write harmonised cubes here instead of in place
 #   --backup-dir     --apply: [_local_data/cube_backup_taxonomy_<date>]
@@ -36,6 +40,7 @@
 suppressPackageStartupMessages({ library(data.table); library(jsonlite); library(curl) })
 source("scripts/lib/cube_update.R")
 source("scripts/lib/taxonomy_match.R")
+source("scripts/lib/sufficiency_criteria.R")   # SUBSETS, in_subsets()
 
 arg <- function(flag, default = NULL) {
   a <- commandArgs(trailingOnly = TRUE); i <- match(flag, a)
@@ -59,8 +64,15 @@ if (has("--build")) {
   }
   tx <- rbindlist(acc)[, .(n_rows = sum(N)), by = TAXON_COLS]
   tx[, old := is_old_key(specieskey)]
-  old <- tx[old == TRUE, .(n_rows = sum(n_rows)), by = .(kingdom, phylum, class, species)]
+  old <- tx[old == TRUE, .(n_rows = sum(n_rows)), by = .(kingdom, phylum, class, order, species)]
   old <- old[order(-n_rows)][!duplicated(old[order(-n_rows)], by = c("kingdom", "species"))]
+  groups <- arg("--groups", paste(SUBSETS, collapse = ","))
+  if (groups != "all") {
+    g <- strsplit(groups, ",")[[1]]
+    n0 <- nrow(old)
+    old <- old[in_subsets(old, g)]
+    cat(sprintf("Matching names in %s only: %d of %d old-backbone names.\n", groups, nrow(old), n0))
+  }
   newr <- tx[old == FALSE][order(-n_rows)][!duplicated(tx[old == FALSE][order(-n_rows)], by = c("kingdom", "species"))]
   cat(sprintf("%d old-backbone names (%s rows), %d new-backbone names.\n", nrow(old),
               format(sum(old$n_rows), big.mark = ","), nrow(newr)))
