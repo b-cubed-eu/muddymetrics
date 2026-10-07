@@ -34,7 +34,8 @@ Outputs are written to `output/` and `report_figures/`.
 ## Data-sufficiency screen, version 1
 
 A single worker computes all criteria for every site x taxon combination, from records dated 1990
-onwards. Thresholds are applied in a separate step, so they can be varied without recomputing.
+onwards (`--last-year 2023` drops later years). Thresholds are applied in a separate step, so they can be varied
+without recomputing.
 
     Rscript scripts/run_sufficiency.R --cores 8            # writes output/sufficiency_v1/sufficiency_raw.csv
     Rscript scripts/run_sufficiency.R --cores 8 --grid 1km # the same on 1 km cells, in output/sufficiency_v1_1km/
@@ -94,8 +95,9 @@ could be computed. 1 km cells are the MGRS 1 km squares containing the 100 m cel
 
 By default `summarise_indicators.R` keeps Hill estimates only from informative years and only where reaching the
 coverage level needs at most twice the observed number of cells (`--hill-years all --max-extrapolation Inf`
-keeps all). `--in` selects the indicator folder; `run_indicators.R` takes `--screen`, `--coverage-rule` and `--out`
-so the indicators can follow another screen run. It fits each annual series by ordinary least squares and by generalised
+keeps all), and `--to-year 2023` ends the series in 2023. `--in` selects the indicator folder; `run_indicators.R` takes
+`--screen`, `--coverage-rule` and `--out` so the indicators can follow another screen run.
+It fits each annual series by ordinary least squares and by generalised
 least squares with AR(1) errors (REML, `nlme::gls`), and, with `--ci`, both again with each year
 weighted by its bootstrap variance. A trend counts as up or down when p ≤ `--alpha` (default 0.05).
 `check_multiverse.R` compares the Hill-number verdicts across Hill orders, grids, coverage levels and

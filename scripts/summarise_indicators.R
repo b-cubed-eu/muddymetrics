@@ -6,6 +6,7 @@
 #   Rscript scripts/summarise_indicators.R --grid 1km --level 0.9 --ci hill_ci_1km_b100.csv
 #   Rscript scripts/summarise_indicators.R --grid 1km --level 0.9 --alpha 0.1   # D6.1's level
 #   Rscript scripts/summarise_indicators.R --in output/indicators_v1b --hill-years all --max-extrapolation Inf
+#   Rscript scripts/summarise_indicators.R --to-year 2023    # leave out later years
 #
 # For each combination and indicator: number of years, mean, and linear trends
 # fitted three ways:
@@ -44,9 +45,10 @@ OUT <- arg("--in", "output/indicators_v1")
 HILL_YEARS <- match.arg(arg("--hill-years", "informative"), c("informative", "all"))
 MAX_EXTRAP <- as.numeric(arg("--max-extrapolation", "2"))
 MIN_YEARS_TREND <- as.integer(arg("--min-years", "3"))
+TO_YEAR <- as.numeric(arg("--to-year", "Inf"))
 
-simple <- fread(file.path(OUT, "simple.csv"))[grid == GRID]
-hill <- fread(file.path(OUT, "hill.csv"))[grid == GRID & abs(level - LEVEL) < 1e-9 & abs(SC - LEVEL) < 1e-3]
+simple <- fread(file.path(OUT, "simple.csv"))[grid == GRID & year <= TO_YEAR]
+hill <- fread(file.path(OUT, "hill.csv"))[grid == GRID & abs(level - LEVEL) < 1e-9 & abs(SC - LEVEL) < 1e-3 & year <= TO_YEAR]
 hill <- hill[t_over_T <= MAX_EXTRAP]
 if (HILL_YEARS == "informative") {
   if (!"n_incidences" %in% names(simple)) stop("simple.csv has no n_incidences column: re-run run_indicators.R, or use --hill-years all")

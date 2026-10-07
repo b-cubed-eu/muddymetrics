@@ -40,9 +40,9 @@ INFORMATIVE_MIN_INCIDENCES <- 50
 # Data preparation
 # ---------------------------------------------------------------------------
 
-#' Keep records from FIRST_YEAR onwards. Rows with missing year are dropped.
-filter_years <- function(df, first_year = FIRST_YEAR) {
-  df[!is.na(df$year) & df$year >= first_year, , drop = FALSE]
+#' Keep records from FIRST_YEAR to last_year. Rows with missing year are dropped.
+filter_years <- function(df, first_year = FIRST_YEAR, last_year = Inf) {
+  df[!is.na(df$year) & df$year >= first_year & df$year <= last_year, , drop = FALSE]
 }
 
 #' MGRS 100 m cell code -> the MGRS 1 km cell containing it

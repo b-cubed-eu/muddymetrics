@@ -4,24 +4,25 @@
 # see apply_sufficiency_thresholds.R.
 #
 # Usage (from the repository root):
-#   Rscript scripts/worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid]
+#   Rscript scripts/worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid] [last_year]
 #
 # grid is "100m" (default, the cube's native cells) or "1km". Only the
 # criteria that use grid cells as sampling units change with the grid: Chao2
 # completeness and annual coverage. Density, temporal decoupling and precision
-# do not depend on it.
+# do not depend on it. last_year (default: none) drops records after that year.
 #
 # The cube path is passed explicitly by the runner, so the worker never looks
 # files up by name.
 
 args <- commandArgs(trailingOnly = TRUE)
-if (!length(args) %in% 5:6) {
-  cat("Usage: worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid]\n")
+if (!length(args) %in% 5:7) {
+  cat("Usage: worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid] [last_year]\n")
   quit(status = 1)
 }
 cont <- args[1]; country <- args[2]; site_id <- args[3]
 cube_path <- args[4]; out_file <- args[5]
-grid <- if (length(args) == 6) args[6] else "100m"
+grid <- if (length(args) >= 6) args[6] else "100m"
+last_year <- if (length(args) == 7) as.numeric(args[7]) else Inf
 
 suppressPackageStartupMessages({
   library(data.table)
@@ -38,7 +39,7 @@ df_all <- as.data.frame(data.table::fread(
   cube_path, select = cols, showProgress = FALSE,
   colClasses = list(character = c("kingdom", "class", "species", "specieskey", "mgrscellcode"),
                     numeric = c("year", "occurrences", "mincoordinateuncertaintyinmeters"))))
-df <- recode_grid(filter_years(df_all), grid)
+df <- recode_grid(filter_years(df_all, last_year = last_year), grid)
 
 wkt_files <- find_wkt(WKT_ROOT, site_id)
 area <- if (length(wkt_files) >= 1) {

@@ -31,7 +31,7 @@ arg <- function(flag, default = NULL) {
 GRID <- match.arg(arg("--grid", "1km"), c("100m", "1km"))
 LEVEL <- as.numeric(arg("--level", "0.9"))
 FROM <- as.integer(arg("--from", "2016")); TO <- as.integer(arg("--to", "2025"))
-MIN_YEARS <- as.integer(arg("--min-years", "8"))
+MIN_YEARS_WINDOW <- as.integer(arg("--min-years", "8"))
 ALPHA <- as.numeric(arg("--alpha", "0.05")); POWER <- as.numeric(arg("--power", "0.8"))
 RULE <- match.arg(arg("--precision-rule", "mean"), c("mean", "median", "d61"))
 CI_FILE <- arg("--ci", sprintf("hill_ci_%s_b100.csv", GRID))
@@ -64,7 +64,7 @@ series <- rbind(
   s[, .(site_id, subset, year, v = obs_richness, se = NA_real_, indicator = "obs_richness")])
 series <- merge(series, combos, by = c("site_id", "subset"))[year >= FROM & year <= TO]
 
-res <- series[order(year), if (.N >= MIN_YEARS && mean(v) > 0) {
+res <- series[order(year), if (.N >= MIN_YEARS_WINDOW && mean(v) > 0) {
   t <- year - mean(year); sxx <- sum(t^2); n <- .N
   k <- qt(1 - ALPHA / 2, n - 2) + qt(POWER, n - 2)
   se_obs <- summary(lm(v ~ year))$sigma / sqrt(sxx)
@@ -76,7 +76,7 @@ res <- series[order(year), if (.N >= MIN_YEARS && mean(v) > 0) {
 tag <- if (is.null(COMBOS)) RULE else basename(dirname(COMBOS))
 fwrite(res, file.path(OUT, sprintf("mdt_per_combo_%s.csv", tag)))
 cat(sprintf("Smallest detectable linear change, %d-%d, %s grid, %.0f%% coverage, alpha %.2f, power %.2f, >= %d years, combinations: %s\n",
-            FROM, TO, GRID, 100 * LEVEL, ALPHA, POWER, MIN_YEARS, if (is.null(COMBOS)) paste("precision rule", RULE) else COMBOS))
+            FROM, TO, GRID, 100 * LEVEL, ALPHA, POWER, MIN_YEARS_WINDOW, if (is.null(COMBOS)) paste("precision rule", RULE) else COMBOS))
 print(res[, .(combinations = .N, median_mdt = round(median(mdt_observed)),
               share_can_detect_benchmark = round(mean(mdt_observed <= BENCHMARK), 2),
               median_mdt_sampling_only = round(median(mdt_sampling_only, na.rm = TRUE))), by = indicator])

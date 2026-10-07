@@ -9,6 +9,7 @@
 #   Rscript scripts/run_sufficiency.R --grid 1km      # screen on 1 km cells
 #                                    # (results in output/sufficiency_v1_1km/)
 #   Rscript scripts/run_sufficiency.R --out output/my_run   # another output folder
+#   Rscript scripts/run_sufficiency.R --last-year 2023     # leave out records after 2023
 #
 # Resumable: sites that already have a result file are skipped. Each site is
 # run in its own R process, so one failing site cannot stop the run; failures
@@ -25,6 +26,7 @@ n_cores <- as.integer(arg("--cores", "8"))
 sites_file <- arg("--sites")
 grid <- match.arg(arg("--grid", "100m"), c("100m", "1km"))
 OUT_DIR <- arg("--out", if (grid == "100m") "output/sufficiency_v1" else "output/sufficiency_v1_1km")
+last_year <- arg("--last-year", "Inf")
 
 # Site discovery (scripts/lib/sufficiency_criteria.R), identical to
 # run_subgroup_data_sufficiency_parallel.R so the site set is comparable with
@@ -48,16 +50,16 @@ cat(sprintf("%d already done, %d to run on %d cores.\n", nrow(sites) - nrow(todo
 
 if (nrow(todo) > 0) {
   cl <- makePSOCKcluster(n_cores)
-  status <- parLapply(cl, seq_len(nrow(todo)), function(i, todo, log_dir, grid) {
+  status <- parLapply(cl, seq_len(nrow(todo)), function(i, todo, log_dir, grid, last_year) {
     s <- todo[i, ]
     log <- file.path(log_dir, paste0(s$site_id, ".log"))
     code <- system2("Rscript", c("scripts/worker_sufficiency.R", shQuote(s$cont), shQuote(s$country),
-                                 shQuote(s$site_id), shQuote(s$file_path), shQuote(s$out_file), grid),
+                                 shQuote(s$site_id), shQuote(s$file_path), shQuote(s$out_file), grid, last_year),
                     stdout = log, stderr = log)
     ok <- code == 0 && file.exists(s$out_file)
     if (ok) unlink(log)   # keep logs only for failures
     data.frame(site_id = s$site_id, ok = ok, exit_code = code)
-  }, todo = todo, log_dir = log_dir, grid = grid)
+  }, todo = todo, log_dir = log_dir, grid = grid, last_year = last_year)
   stopCluster(cl)
   status <- bind_rows(status)
   failed <- status[!status$ok, ]
