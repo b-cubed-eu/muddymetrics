@@ -54,11 +54,24 @@ find_site_wkt <- function(site_id, wkt_files, country = NULL) {
   if (length(hit)) hit[1] else NA_character_
 }
 
-#' Read site outlines into an sf object with one row per site.
+#' Read site outlines into an sf object with one row per site. Invalid outlines
+#' are repaired with planar geometry (GEOS), the same geometry the cells are
+#' tested with: a repair on the sphere (s2, sf's default for longitude/latitude)
+#' can return outlines that are invalid in planar geometry, and planar
+#' point-in-polygon tests on those miss cells (found for 143 of 1,638 sites).
 read_site_outlines <- function(site_ids, wkt_paths) {
   geoms <- lapply(wkt_paths, function(p) sf::st_as_sfc(paste(readLines(p, warn = FALSE), collapse = ""), crs = 4326)[[1]])
   s <- sf::st_sf(site_id = site_ids, geometry = sf::st_sfc(geoms, crs = 4326))
-  suppressWarnings(sf::st_make_valid(s))
+  s2 <- sf::sf_use_s2(); on.exit(suppressMessages(sf::sf_use_s2(s2)))
+  suppressMessages(sf::sf_use_s2(FALSE))
+  s <- suppressWarnings(sf::st_make_valid(s))
+  # a repair can return a collection of polygons and lines; keep the polygons
+  g <- lapply(sf::st_geometry(s), function(x) {
+    x <- sf::st_sfc(x, crs = 4326)
+    if (!all(sf::st_geometry_type(x) %in% c("POLYGON", "MULTIPOLYGON"))) x <- sf::st_collection_extract(x, "POLYGON")
+    sf::st_cast(suppressMessages(sf::st_union(x)), "MULTIPOLYGON")[[1]]
+  })
+  sf::st_sf(site_id = s$site_id, geometry = sf::st_sfc(g, crs = 4326))
 }
 
 #' 100 km MGRS squares ("30UVB") touched by a site outline: a 21 x 21 grid of

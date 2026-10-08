@@ -57,6 +57,18 @@ test_that("cells are assigned to the outline that contains them", {
   expect_true(substr(inside, 1, 5) %in% site_squares(st_geometry(sq)[1]))
 })
 
+test_that("invalid outlines are repaired in planar geometry, so that they are valid for the planar cell test", {
+  f <- tempfile(fileext = ".wkt")
+  writeLines("MULTIPOLYGON (((0 50, 1 51, 1 50, 0 51, 0 50)))", f)      # self-crossing ring (bow tie)
+  s2_before <- sf_use_s2()
+  o <- read_site_outlines("site_1", f)
+  expect_identical(sf_use_s2(), s2_before)                            # session setting left as it was
+  old <- suppressMessages(sf_use_s2(FALSE)); on.exit(suppressMessages(sf_use_s2(s2_before)))
+  expect_true(all(st_is_valid(o)))
+  inside <- c(latlng_to_mgrs(50.5, 0.1, precision = 3), latlng_to_mgrs(50.5, 0.9, precision = 3))
+  expect_setequal(assign_cells(inside, o)$mgrscellcode, inside)
+})
+
 test_that("stream_update reads past invalid bytes, filters by square and drops broken lines", {
   f <- tempfile(fileext = ".tsv")
   ln <- function(cell, sp) paste(c("Animalia", "N", "Chordata", "CH2", "Aves", "V2", "O", "o", "F", "f", "G", "g",
