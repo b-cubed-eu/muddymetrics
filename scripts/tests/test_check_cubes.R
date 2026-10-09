@@ -284,7 +284,8 @@ test_that("older rows rebuilt from the reference pass the check", {
   expect_null(attr(out, "status"))
   expect_equal(tools::md5sum(c(file.path(w$cdir, "site_1_One_data.csv"), file.path(adir, "site_2_Two_data.csv"))), orig)   # cubes untouched
   sm <- fread(file.path(w$dir, "_local_data/cube_rebuild_work/rebuild_summary.csv"))
-  expect_equal(sm[site_id == "site_1", .(action, missing_before, extra_before)], data.table(action = "rebuilt", missing_before = 3L, extra_before = 2L))
+  expect_equal(sm[site_id == "site_1", .(action, rows_cube, missing_before, extra_before)],
+               data.table(action = "rebuilt", rows_cube = nrow(fread(file.path(w$cdir, "site_1_One_data.csv"))), missing_before = 3L, extra_before = 2L))
   expect_equal(sm[site_id == "site_2", .(action, cube, moved_from)],
                data.table(action = "moved", cube = "ramsar_site_data_100m_europe/Belgium/site_2_Two_data.csv",
                           moved_from = "ramsar_site_data_100m_asia/Belgium/site_2_Two_data.csv"))

@@ -119,7 +119,8 @@ run_bucket <- function(b) {
     if (length(files) > 1) { row[, action := "skipped: several cube files"]; return(row) }
     cube <- if (length(files)) chk_read_cube(files) else NULL
     mb <- rb_missing_before(if (is.null(cube)) ref[0, CHK_COLS, with = FALSE] else cube, ref, FROM)
-    row[, `:=`(rows_cube = if (is.null(cube)) 0L else nrow(cube), rows_before_cube = mb$rows_cube, rows_before_ref = mb$rows_ref,
+    n_cube <- if (is.null(cube)) 0L else nrow(cube)   # computed outside row[...], where `cube` would be the column
+    row[, `:=`(rows_cube = n_cube, rows_before_cube = mb$rows_cube, rows_before_ref = mb$rows_ref,
                missing_before = mb$missing, extra_before = mb$extra)]
     rebuild <- if (is.null(cube)) nrow(ref) > 0 else if (RB_FORCE) mb$missing + mb$extra > 0 else
       mb$missing >= RB_MIN_ROWS && mb$missing >= RB_MIN_SHARE * mb$rows_ref
