@@ -18,6 +18,14 @@
 # cube's own rows from --from-year on (for a new cube, the reference rows
 # from --from-year on).
 #
+# Cubes filed under a continent folder other than the one whose continental
+# cube holds most of the site's older rows (for example the Corsican site
+# Etang de Biguglia under ramsar_site_data_100m_southamerica/France) are
+# written to that continent's folder, same country folder and file name; the
+# install step then moves the old file to the backup folder. Sites without
+# older rows, or with a tie between continents, stay where they are.
+# --no-refile leaves every cube where it is.
+#
 # The rebuilt cubes are written to --out-dir (same relative paths) and put
 # into place with scripts/patch_site_cubes_update.R --install-from, which
 # backs up and verifies each original. Run the cube check again afterwards.
@@ -36,6 +44,7 @@
 #   --min-share   ... and at least this share of them [0.001]
 #   --sites       only these site ids (comma-separated or a file)
 #   --cores       parallel processes [4]
+#   --no-refile   do not move cubes to the continent folder their rows come from
 #   --dry-run     only write the summary of what would be done
 
 suppressPackageStartupMessages({ library(data.table); library(sf); library(mgrs); library(stringi); library(parallel) })
@@ -58,6 +67,7 @@ RB_MIN_SHARE <- as.numeric(arg("--min-share", "0.001"))
 SITES <- arg("--sites")
 CORES <- as.integer(arg("--cores", "4"))
 DRY <- has("--dry-run")
+RB_REFILE <- !has("--no-refile")
 REF_DIR <- file.path(CHECK, "reference")
 say <- function(...) cat(format(Sys.time(), "%H:%M:%S"), sprintf(...), "\n")
 
@@ -71,8 +81,8 @@ if (normalizePath(OUT_DIR, mustWork = FALSE) == normalizePath(ROOT, mustWork = F
 WORK <- if (DRY) file.path(WORK, "dry_run") else WORK
 dir.create(WORK, showWarnings = FALSE, recursive = TRUE)
 # Finished buckets are reused when the script is run again, so only with the same settings.
-settings <- data.table(setting = c("check_dir", "root", "out_dir", "from_year", "min_rows", "min_share", "sites"),
-                       value = c(CHECK, ROOT, OUT_DIR, FROM, RB_MIN_ROWS, RB_MIN_SHARE, if (is.null(SITES)) "all" else SITES))
+settings <- data.table(setting = c("check_dir", "root", "out_dir", "from_year", "min_rows", "min_share", "sites", "refile"),
+                       value = c(CHECK, ROOT, OUT_DIR, FROM, RB_MIN_ROWS, RB_MIN_SHARE, if (is.null(SITES)) "all" else SITES, RB_REFILE))
 sf_ <- file.path(WORK, "settings.csv")
 if (file.exists(sf_)) {
   old <- fread(sf_, colClasses = "character")
@@ -99,6 +109,7 @@ run_bucket <- function(b) {
     row <- data.table(site_id = s, n_cube_files = length(files), cube = if (length(files)) paste(cubes$rel[cubes$site_id %in% s], collapse = " | ") else "",
                       rows_cube = 0L, rows_ref = nrow(ref), rows_before_cube = 0L, rows_before_ref = 0L, missing_before = 0L,
                       extra_before = 0L, rows_from_kept = 0L, rows_new = 0L, dup_keys_before = 0L,
+                      continent_by_rows = "", moved_from = "",
                       sources = paste(sprintf("%s:%d", names(table(ref$source)), as.integer(table(ref$source))), collapse = "|"),
                       action = "kept")
     if (length(files) > 1) { row[, action := "skipped: several cube files"]; return(row) }
@@ -107,12 +118,16 @@ run_bucket <- function(b) {
     row[, `:=`(rows_cube = if (is.null(cube)) 0L else nrow(cube), rows_before_cube = mb$rows_cube, rows_before_ref = mb$rows_ref,
                missing_before = mb$missing, extra_before = mb$extra)]
     rebuild <- if (is.null(cube)) nrow(ref) > 0 else mb$missing >= RB_MIN_ROWS && mb$missing >= RB_MIN_SHARE * mb$rows_ref
-    if (!rebuild) return(row)
+    cont_rows <- rb_continent_of(ref$source)
+    row[, continent_by_rows := if (is.na(cont_rows)) "" else cont_rows]
+    cur <- cubes[site_id %in% s]
+    move <- !is.null(cube) && RB_REFILE && !is.na(cont_rows) && cont_rows != cur$folder
+    if (!rebuild && !move) return(row)
     if (is.null(cube)) {
       w <- wkt[grepl(paste0("^", s, "_"), basename(wkt))]
       if (length(w) != 1) { row[, action := "skipped: no single outline file to name the new cube"]; return(row) }
       country <- basename(dirname(w))
-      cont <- rb_continent_of(ref$source)
+      cont <- cont_rows
       if (is.na(cont)) {
         cc <- setdiff(unique(cubes$folder[cubes$country_dir == country]), "unknown")
         cont <- if (length(cc) == 1) cc else NA_character_
@@ -121,10 +136,11 @@ run_bucket <- function(b) {
       rel <- file.path(paste0("ramsar_site_data_100m_", cont), country, paste0(sub("\\.wkt$", "", basename(w)), "_data.csv"))
       row[, `:=`(cube = rel, action = "new cube")]
     } else {
-      rel <- cubes$rel[cubes$site_id %in% s]
-      row[, action := "rebuilt"]
+      rel <- if (move) file.path(paste0("ramsar_site_data_100m_", cont_rows), cur$country_dir, basename(cur$file)) else cur$rel
+      row[, `:=`(cube = rel, moved_from = if (move) cur$rel else "",
+                 action = paste(c(if (rebuild) "rebuilt", if (move) "moved"), collapse = " and "))]
     }
-    new <- rb_rebuilt_rows(cube, ref, FROM)
+    new <- if (rebuild) rb_rebuilt_rows(cube, ref, FROM) else cube
     yn <- suppressWarnings(as.numeric(new$year))
     row[, `:=`(rows_from_kept = sum(!is.na(yn) & yn >= FROM), rows_new = nrow(new),
                dup_keys_before = sum(duplicated(new[!is.na(yn) & yn < FROM, .(mgrscellcode, year, specieskey)])))]
@@ -151,13 +167,14 @@ res <- tryCatch({
     source("scripts/lib/sufficiency_criteria.R"); source("scripts/lib/cube_check.R"); source("scripts/lib/cube_rebuild.R")
     NULL
   })
-  clusterExport(cl, c("ROOT", "OUT_DIR", "WORK", "FROM", "RB_MIN_ROWS", "RB_MIN_SHARE", "DRY", "REF_DIR", "NB", "ids", "cubes", "wkt", "run_bucket"))
+  clusterExport(cl, c("ROOT", "OUT_DIR", "WORK", "FROM", "RB_MIN_ROWS", "RB_MIN_SHARE", "RB_REFILE", "DRY", "REF_DIR", "NB", "ids", "cubes", "wkt", "run_bucket"))
   parLapplyLB(cl, buckets, function(b) tryCatch(run_bucket(b), error = function(e) paste("bucket", b, ":", conditionMessage(e))), chunk.size = 1)
 }, finally = stopCluster(cl))
 errs <- unlist(res[vapply(res, is.character, TRUE)])
 if (length(errs)) { print(errs); stop("Some buckets failed (listed above); finished buckets are kept, run again to continue.") }
 
-summ <- rbindlist(lapply(file.path(WORK, sprintf("bucket_%03d.csv", buckets)), fread, colClasses = list(character = c("site_id", "cube", "sources"))))
+summ <- rbindlist(lapply(file.path(WORK, sprintf("bucket_%03d.csv", buckets)), fread,
+                         colClasses = list(character = c("site_id", "cube", "sources", "continent_by_rows", "moved_from"))))
 summ <- summ[order(as.integer(sub("site_", "", site_id)))]
 fwrite(summ, file.path(WORK, "rebuild_summary.csv"))
 print(summ[, .(sites = .N, rows_before_ref = sum(rows_before_ref), missing_before = sum(missing_before), extra_before = sum(extra_before)), by = action])

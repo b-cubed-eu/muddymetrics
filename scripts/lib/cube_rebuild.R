@@ -62,11 +62,13 @@ rb_rebuilt_rows <- function(cube, ref, from_year) {
   rbind(before, from)
 }
 
-#' Continent folder for a site that has no cube: the continent whose
-#' continental cube holds most of the site's reference rows, else NA.
+#' Continent folder a site's cube belongs in: the continent whose continental
+#' cube holds most of the site's reference rows (years before 2024). NA when
+#' there are no such rows or two continents hold the same number.
 rb_continent_of <- function(sources) {
   s <- sources[grepl("_100m_mgrs_all$", sources)]
   if (!length(s)) return(NA_character_)
   tb <- sort(table(sub("_100m_mgrs_all$", "", s)), decreasing = TRUE)
+  if (length(tb) > 1 && tb[[1]] == tb[[2]]) return(NA_character_)
   names(tb)[1]
 }
