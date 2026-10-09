@@ -273,16 +273,21 @@ test_that("older rows rebuilt from the reference pass the check", {
   run_check(w, "--step", "inventory"); run_check(w, "--step", "reference")
   file.symlink(file.path(repo, "scripts"), file.path(w$dir, "scripts"))
   rs <- function(script, ...) withr::with_dir(w$dir, system2("Rscript", c(script, ...), stdout = TRUE, stderr = TRUE))
-  orig <- tools::md5sum(file.path(w$cdir, c("site_1_One_data.csv", "site_2_Two_data.csv")))
+  # site 2 filed under the wrong continent (its rows come from the Europe cube): moved back by the rebuild
+  adir <- file.path(w$dir, "inst/extdata/ramsar_site_data_100m_asia/Belgium"); dir.create(adir, recursive = TRUE)
+  file.rename(file.path(w$cdir, "site_2_Two_data.csv"), file.path(adir, "site_2_Two_data.csv"))
+  orig <- tools::md5sum(c(file.path(w$cdir, "site_1_One_data.csv"), file.path(adir, "site_2_Two_data.csv")))
   out <- rs("scripts/rebuild_site_cubes_from_reference.R", "--check-dir", "check", "--min-rows", "1", "--cores", "1", "--dry-run")
   expect_null(attr(out, "status"))
   expect_false(dir.exists(file.path(w$dir, "_local_data/cube_rebuild")))
   out <- rs("scripts/rebuild_site_cubes_from_reference.R", "--check-dir", "check", "--min-rows", "1", "--cores", "1")
   expect_null(attr(out, "status"))
-  expect_equal(tools::md5sum(file.path(w$cdir, c("site_1_One_data.csv", "site_2_Two_data.csv"))), orig)   # cubes untouched
+  expect_equal(tools::md5sum(c(file.path(w$cdir, "site_1_One_data.csv"), file.path(adir, "site_2_Two_data.csv"))), orig)   # cubes untouched
   sm <- fread(file.path(w$dir, "_local_data/cube_rebuild_work/rebuild_summary.csv"))
   expect_equal(sm[site_id == "site_1", .(action, missing_before, extra_before)], data.table(action = "rebuilt", missing_before = 3L, extra_before = 2L))
-  expect_equal(sm[site_id == "site_2", action], "kept")
+  expect_equal(sm[site_id == "site_2", .(action, cube, moved_from)],
+               data.table(action = "moved", cube = "ramsar_site_data_100m_europe/Belgium/site_2_Two_data.csv",
+                          moved_from = "ramsar_site_data_100m_asia/Belgium/site_2_Two_data.csv"))
   expect_equal(sm[site_id == "site_3", .(action, cube)],
                data.table(action = "new cube", cube = "ramsar_site_data_100m_europe/Belgium/site_3_Three_data.csv"))
   # rerunning with other settings in the same work folder is refused
@@ -297,5 +302,15 @@ test_that("older rows rebuilt from the reference pass the check", {
   expect_equal(s1$missing_from, 1)                     # the 2025 snake: rows from 2024 on are kept as they were
   s3 <- st[site_id == "site_3"]
   expect_equal(c(s3$n_cube_files, s3$rows_cube, s3$rows_same), c(1, 1, 1))
-  expect_equal(st[site_id == "site_2", rows_same], nrow(w$site2))
+  expect_equal(st[site_id == "site_2", .(n_cube_files, rows_same)], data.table(n_cube_files = 1L, rows_same = nrow(w$site2)))
+  expect_false(file.exists(file.path(adir, "site_2_Two_data.csv")))      # the misfiled copy is in the backup folder
+  bk <- file.path(w$dir, "_local_data", paste0("cube_backup_", format(Sys.Date(), "%Y%m%d")), "ramsar_site_data_100m_asia/Belgium/site_2_Two_data.csv")
+  expect_equal(unname(tools::md5sum(bk)), unname(orig[2]))
+  # --no-refile leaves misfiled cubes where they are
+  file.copy(bk, file.path(adir, "site_2_Two_data.csv")); file.remove(file.path(w$cdir, "site_2_Two_data.csv"))
+  out <- rs("scripts/rebuild_site_cubes_from_reference.R", "--check-dir", "check", "--min-rows", "1", "--cores", "1", "--no-refile",
+            "--out-dir", "_local_data/cube_rebuild2", "--work-dir", "_local_data/cube_rebuild2_work")
+  expect_null(attr(out, "status"))
+  sm2 <- fread(file.path(w$dir, "_local_data/cube_rebuild2_work/rebuild_summary.csv"))
+  expect_equal(sm2[site_id == "site_2", action], "kept")
 })

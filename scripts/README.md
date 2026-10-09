@@ -194,7 +194,11 @@ The check of October 2026 found cubes whose rows before 2024 are incomplete (cub
 June 2026 that stopped reading early or used another continent's cube, sites whose outlines are
 invalid in planar geometry, rows filed under a neighbouring continent). `rebuild_site_cubes_from_reference.R`
 replaces the rows before 2024 of these cubes with the rows the reference step collected, keeps the
-rows from 2024 on, and writes new cubes for sites with data but no cube. The rebuilt cubes go to a
+rows from 2024 on, and writes new cubes for sites with data but no cube. Cubes filed under another
+continent than the one whose continental cube holds most of their older rows (such as the Corsican
+Etang de Biguglia under `ramsar_site_data_100m_southamerica/France`) are moved to that continent's
+folder; the v1 scripts find cubes by site id (`discover_site_cubes()`), so only the continent label
+in their output changes. The rebuilt cubes go to a
 separate folder and are put into place with the patch script's install step; the check is then run
 again. For the rebuilt sites the check is no longer independent of the build, since both use the
 reference rows.
