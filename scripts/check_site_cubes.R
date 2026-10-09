@@ -216,8 +216,11 @@ if (STEP %in% c("compare", "all")) {
            yg = if (nrow(yg)) cbind(site_id = s, yg) else NULL,
            ex = if (!is.null(cmp$examples) && nrow(cmp$examples)) cbind(site_id = s, cmp$examples) else NULL)
     })
-    fwrite(rbindlist(lapply(res, `[[`, "yg")), file.path(CMP_DIR, sprintf("bucket_%03d_year_group.csv", b)))
-    fwrite(rbindlist(lapply(res, `[[`, "ex"), fill = TRUE), file.path(CMP_DIR, sprintf("bucket_%03d_examples.csv", b)))
+    # an empty table is written as an empty file, so that a bucket redone without differences
+    # does not keep the examples of an earlier run (fwrite writes nothing for a table without columns)
+    put <- function(x, f) if (ncol(x)) fwrite(x, f) else writeLines(character(0), f)
+    put(rbindlist(lapply(res, `[[`, "yg")), file.path(CMP_DIR, sprintf("bucket_%03d_year_group.csv", b)))
+    put(rbindlist(lapply(res, `[[`, "ex"), fill = TRUE), file.path(CMP_DIR, sprintf("bucket_%03d_examples.csv", b)))
     f <- file.path(CMP_DIR, sprintf("bucket_%03d_sites.csv", b))   # written last: marks the bucket as done
     fwrite(rbindlist(lapply(res, `[[`, "site"), fill = TRUE), paste0(f, ".tmp")); file.rename(paste0(f, ".tmp"), f)
     b

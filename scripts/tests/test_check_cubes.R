@@ -325,3 +325,20 @@ test_that("older rows rebuilt from the reference pass the check", {
   sm4 <- fread(file.path(w$dir, "_local_data/cube_rebuild4_work/rebuild_summary.csv"))
   expect_equal(sm4[, .(action, extra_before, rows_new)], data.table(action = "rebuilt", extra_before = 1L, rows_new = nrow(w$site2)))
 })
+
+test_that("a bucket compared again without differences keeps no examples from the earlier run", {
+  skip_if_not_installed("withr")
+  w <- world()
+  run_check(w, "--step", "inventory"); run_check(w, "--step", "reference")
+  run_check(w, "--step", "compare", "--tag", "t")
+  ex <- fread(file.path(w$dir, "check/compare_t/examples.csv"))
+  expect_true(any(ex$site_id == "site_1"))
+  Sys.sleep(1.1)
+  fwrite(w$site1, file.path(w$cdir, "site_1_One_data.csv"))          # site 1 repaired
+  run_check(w, "--step", "compare", "--tag", "t")
+  st <- fread(file.path(w$dir, "check/compare_t/sites.csv"))[site_id == "site_1"]
+  expect_equal(c(st$rows_cube, st$rows_same), rep(nrow(w$site1), 2))
+  f <- file.path(w$dir, "check/compare_t/examples.csv")
+  ex <- if (file.size(f) > 0) fread(f) else data.table(site_id = character())
+  expect_false(any(ex$site_id == "site_1"))
+})
