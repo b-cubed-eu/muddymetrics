@@ -313,4 +313,14 @@ test_that("older rows rebuilt from the reference pass the check", {
   expect_null(attr(out, "status"))
   sm2 <- fread(file.path(w$dir, "_local_data/cube_rebuild2_work/rebuild_summary.csv"))
   expect_equal(sm2[site_id == "site_2", action], "kept")
+  # --force rebuilds a cube whose only difference is an extra row before 2024
+  s2 <- fread(file.path(adir, "site_2_Two_data.csv"), colClasses = "character")
+  fwrite(rbind(s2, s2[1]), file.path(adir, "site_2_Two_data.csv"))
+  out <- rs("scripts/rebuild_site_cubes_from_reference.R", "--check-dir", "check", "--cores", "1", "--no-refile", "--sites", "site_2",
+            "--out-dir", "_local_data/cube_rebuild3", "--work-dir", "_local_data/cube_rebuild3_work")
+  expect_equal(fread(file.path(w$dir, "_local_data/cube_rebuild3_work/rebuild_summary.csv"))$action, "kept")
+  out <- rs("scripts/rebuild_site_cubes_from_reference.R", "--check-dir", "check", "--cores", "1", "--no-refile", "--sites", "site_2", "--force",
+            "--out-dir", "_local_data/cube_rebuild4", "--work-dir", "_local_data/cube_rebuild4_work")
+  sm4 <- fread(file.path(w$dir, "_local_data/cube_rebuild4_work/rebuild_summary.csv"))
+  expect_equal(sm4[, .(action, extra_before, rows_new)], data.table(action = "rebuilt", extra_before = 1L, rows_new = nrow(w$site2)))
 })

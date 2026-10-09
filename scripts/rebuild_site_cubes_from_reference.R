@@ -44,6 +44,9 @@
 #   --min-share   ... and at least this share of them [0.001]
 #   --sites       only these site ids (comma-separated or a file)
 #   --cores       parallel processes [4]
+#   --force       rebuild every cube whose older rows differ from the reference at all
+#                 (missing or extra rows), whatever --min-rows and --min-share say;
+#                 meant with --sites
 #   --no-refile   do not move cubes to the continent folder their rows come from
 #   --dry-run     only write the summary of what would be done
 
@@ -68,6 +71,7 @@ SITES <- arg("--sites")
 CORES <- as.integer(arg("--cores", "4"))
 DRY <- has("--dry-run")
 RB_REFILE <- !has("--no-refile")
+RB_FORCE <- has("--force")
 REF_DIR <- file.path(CHECK, "reference")
 say <- function(...) cat(format(Sys.time(), "%H:%M:%S"), sprintf(...), "\n")
 
@@ -81,8 +85,8 @@ if (normalizePath(OUT_DIR, mustWork = FALSE) == normalizePath(ROOT, mustWork = F
 WORK <- if (DRY) file.path(WORK, "dry_run") else WORK
 dir.create(WORK, showWarnings = FALSE, recursive = TRUE)
 # Finished buckets are reused when the script is run again, so only with the same settings.
-settings <- data.table(setting = c("check_dir", "root", "out_dir", "from_year", "min_rows", "min_share", "sites", "refile"),
-                       value = c(CHECK, ROOT, OUT_DIR, FROM, RB_MIN_ROWS, RB_MIN_SHARE, if (is.null(SITES)) "all" else SITES, RB_REFILE))
+settings <- data.table(setting = c("check_dir", "root", "out_dir", "from_year", "min_rows", "min_share", "sites", "refile", "force"),
+                       value = c(CHECK, ROOT, OUT_DIR, FROM, RB_MIN_ROWS, RB_MIN_SHARE, if (is.null(SITES)) "all" else SITES, RB_REFILE, RB_FORCE))
 sf_ <- file.path(WORK, "settings.csv")
 if (file.exists(sf_)) {
   old <- fread(sf_, colClasses = "character")
@@ -117,7 +121,8 @@ run_bucket <- function(b) {
     mb <- rb_missing_before(if (is.null(cube)) ref[0, CHK_COLS, with = FALSE] else cube, ref, FROM)
     row[, `:=`(rows_cube = if (is.null(cube)) 0L else nrow(cube), rows_before_cube = mb$rows_cube, rows_before_ref = mb$rows_ref,
                missing_before = mb$missing, extra_before = mb$extra)]
-    rebuild <- if (is.null(cube)) nrow(ref) > 0 else mb$missing >= RB_MIN_ROWS && mb$missing >= RB_MIN_SHARE * mb$rows_ref
+    rebuild <- if (is.null(cube)) nrow(ref) > 0 else if (RB_FORCE) mb$missing + mb$extra > 0 else
+      mb$missing >= RB_MIN_ROWS && mb$missing >= RB_MIN_SHARE * mb$rows_ref
     cont_rows <- rb_continent_of(ref$source)
     row[, continent_by_rows := if (is.na(cont_rows)) "" else cont_rows]
     cur <- cubes[site_id %in% s]
@@ -167,7 +172,7 @@ res <- tryCatch({
     source("scripts/lib/sufficiency_criteria.R"); source("scripts/lib/cube_check.R"); source("scripts/lib/cube_rebuild.R")
     NULL
   })
-  clusterExport(cl, c("ROOT", "OUT_DIR", "WORK", "FROM", "RB_MIN_ROWS", "RB_MIN_SHARE", "RB_REFILE", "DRY", "REF_DIR", "NB", "ids", "cubes", "wkt", "run_bucket"))
+  clusterExport(cl, c("ROOT", "OUT_DIR", "WORK", "FROM", "RB_MIN_ROWS", "RB_MIN_SHARE", "RB_REFILE", "RB_FORCE", "DRY", "REF_DIR", "NB", "ids", "cubes", "wkt", "run_bucket"))
   parLapplyLB(cl, buckets, function(b) tryCatch(run_bucket(b), error = function(e) paste("bucket", b, ":", conditionMessage(e))), chunk.size = 1)
 }, finally = stopCluster(cl))
 errs <- unlist(res[vapply(res, is.character, TRUE)])

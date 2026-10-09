@@ -237,7 +237,10 @@ if (STEP %in% c("compare", "all")) {
     errs <- unlist(res[vapply(res, is.character, TRUE)])
     if (length(errs)) { print(errs); stop("Some buckets failed (listed above); finished buckets are kept.") }
   }
-  rd <- function(pat) rbindlist(lapply(list.files(CMP_DIR, pattern = pat, full.names = TRUE), fread, colClasses = list(character = "site_id")), fill = TRUE)
+  rd <- function(pat) {
+    fs <- list.files(CMP_DIR, pattern = pat, full.names = TRUE)
+    rbindlist(lapply(fs[file.size(fs) > 0], fread, colClasses = list(character = "site_id")), fill = TRUE)   # empty: no differing rows
+  }
   sites <- rd("^bucket_[0-9]+_sites\\.csv$")
   fwrite(sites[order(as.integer(sub("site_", "", site_id)))], file.path(CMP_DIR, "sites.csv"))
   fwrite(rd("^bucket_[0-9]+_year_group\\.csv$"), file.path(CMP_DIR, "year_group.csv.gz"))
