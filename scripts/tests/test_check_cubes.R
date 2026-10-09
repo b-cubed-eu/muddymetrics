@@ -236,7 +236,9 @@ test_that("cubes rebuilt by the patch script pass the check", {
   expect_equal(unname(tools::md5sum(file.path(bk, "ramsar_site_data_100m_europe/Belgium", c("site_1_One_data.csv", "site_2_Two_data.csv")))), unname(orig))
   expect_true(file.exists(file.path(bk, "ramsar_site_data_100m_unknown/x/site_1_One_data.csv")))
   expect_false(file.exists(file.path(unk, "site_1_One_data.csv")))
-  il <- fread(file.path(w$dir, "_local_data/cube_patch_work/install_log.csv"))
+  il <- list.files(file.path(w$dir, "_local_data/cube_patch_work"), pattern = "^install_log_[0-9_]+\\.csv$", full.names = TRUE)
+  expect_length(il, 1)
+  il <- fread(il)
   expect_true(all(il$verified)); expect_setequal(il$action, "replaced")
   rd <- fread(file.path(w$dir, "_local_data/cube_patch_work/update_files_read.csv"))
   expect_equal(rd$rows_other_years, c(2, 0)); expect_equal(rd$rows_other_taxa, c(0, 1))
@@ -244,4 +246,56 @@ test_that("cubes rebuilt by the patch script pass the check", {
   st <- fread(file.path(w$dir, "check/compare_patched/sites.csv"))[site_id %in% c("site_1", "site_2")]
   expect_equal(st$rows_cube, c(nrow(w$site1), nrow(w$site2)))
   expect_equal(st$rows_same, st$rows_ref); expect_equal(st$rows_same, st$rows_cube)
+})
+
+test_that("rows that differ only in the higher-taxon counts are counted apart", {
+  row <- function(sp, occ, kc) data.table(kingdom = "Animalia", kingdomkey = "1", phylum = "Chordata", phylumkey = "44", class = "Aves",
+                                          classkey = "212", order = "O", orderkey = "1", family = "F", familykey = "1", genus = "G",
+                                          genuskey = "1", species = sp, specieskey = sp, year = "2010", mgrscellcode = "31UES000000",
+                                          kingdomcount = kc, phylumcount = kc, classcount = "1", ordercount = "1", familycount = "1",
+                                          genuscount = "1", occurrences = occ, mintemporaluncertainty = "60",
+                                          mincoordinateuncertaintyinmeters = "100")
+  ref <- chk_normalise(rbind(row("A", "1", "5"), row("B", "2", "5"), row("C", "1", "5")))
+  cube <- chk_normalise(rbind(row("A", "1", "1"), row("B", "2", "5"), row("C", "3", "5")))
+  ll <- mgrs::mgrs_to_latlng("31UES000000")
+  box <- sf::st_as_sfc(sf::st_bbox(c(xmin = ll$lng - 0.01, ymin = ll$lat - 0.01, xmax = ll$lng + 0.01, ymax = ll$lat + 0.01), crs = 4326))
+  r <- chk_compare_site(cube, ref, CHK_COLS, sf::st_sf(site_id = "site_1", geometry = box), 2024)$counts
+  expect_equal(r$rows_same, 2)            # A (counts only) and B
+  expect_equal(r$count_cols_differ, 1)    # A
+  expect_equal(r$missing_before, 1)       # C with 1 occurrence
+  expect_equal(r$extra_inside_site, 1)    # C with 3 occurrences
+})
+
+test_that("older rows rebuilt from the reference pass the check", {
+  skip_if_not_installed("withr")
+  w <- world()
+  repo <- normalizePath(file.path(here, ".."))
+  run_check(w, "--step", "inventory"); run_check(w, "--step", "reference")
+  file.symlink(file.path(repo, "scripts"), file.path(w$dir, "scripts"))
+  rs <- function(script, ...) withr::with_dir(w$dir, system2("Rscript", c(script, ...), stdout = TRUE, stderr = TRUE))
+  orig <- tools::md5sum(file.path(w$cdir, c("site_1_One_data.csv", "site_2_Two_data.csv")))
+  out <- rs("scripts/rebuild_site_cubes_from_reference.R", "--check-dir", "check", "--min-rows", "1", "--cores", "1", "--dry-run")
+  expect_null(attr(out, "status"))
+  expect_false(dir.exists(file.path(w$dir, "_local_data/cube_rebuild")))
+  out <- rs("scripts/rebuild_site_cubes_from_reference.R", "--check-dir", "check", "--min-rows", "1", "--cores", "1")
+  expect_null(attr(out, "status"))
+  expect_equal(tools::md5sum(file.path(w$cdir, c("site_1_One_data.csv", "site_2_Two_data.csv"))), orig)   # cubes untouched
+  sm <- fread(file.path(w$dir, "_local_data/cube_rebuild_work/rebuild_summary.csv"))
+  expect_equal(sm[site_id == "site_1", .(action, missing_before, extra_before)], data.table(action = "rebuilt", missing_before = 3L, extra_before = 2L))
+  expect_equal(sm[site_id == "site_2", action], "kept")
+  expect_equal(sm[site_id == "site_3", .(action, cube)],
+               data.table(action = "new cube", cube = "ramsar_site_data_100m_europe/Belgium/site_3_Three_data.csv"))
+  # rerunning with other settings in the same work folder is refused
+  out <- suppressWarnings(rs("scripts/rebuild_site_cubes_from_reference.R", "--check-dir", "check", "--min-rows", "5", "--cores", "1"))
+  expect_false(is.null(attr(out, "status")))
+  out <- rs("scripts/patch_site_cubes_update.R", "--install-from", "_local_data/cube_rebuild", "--work-dir", "_local_data/cube_rebuild_work")
+  expect_null(attr(out, "status"))
+  run_check(w, "--step", "compare", "--tag", "rebuilt")
+  st <- fread(file.path(w$dir, "check/compare_rebuilt/sites.csv"))
+  s1 <- st[site_id == "site_1"]
+  expect_equal(c(s1$missing_before, s1$extra_inside_site, s1$extra_outside_site, s1$extra_before), c(0, 0, 0, 0))
+  expect_equal(s1$missing_from, 1)                     # the 2025 snake: rows from 2024 on are kept as they were
+  s3 <- st[site_id == "site_3"]
+  expect_equal(c(s3$n_cube_files, s3$rows_cube, s3$rows_same), c(1, 1, 1))
+  expect_equal(st[site_id == "site_2", rows_same], nrow(w$site2))
 })

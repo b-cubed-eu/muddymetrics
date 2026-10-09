@@ -95,7 +95,8 @@ dir.create(WORK, showWarnings = FALSE, recursive = TRUE)
 INSTALL <- arg("--install-from")
 if (!is.null(INSTALL)) {
   log <- install_patched(INSTALL, ROOT, BACKUP, dry_run = has("--dry-run"))
-  f <- file.path(WORK, if (has("--dry-run")) "install_plan.csv" else "install_log.csv")
+  # time-stamped, so that a later install with the same work dir does not overwrite the log
+  f <- file.path(WORK, sprintf("%s_%s.csv", if (has("--dry-run")) "install_plan" else "install_log", format(Sys.time(), "%Y%m%d_%H%M%S")))
   fwrite(log, f)
   print(log[, .N, by = action])
   if (!has("--dry-run")) cat(sprintf("Cubes in place: %d, all verified: %s. Originals in %s. Log: %s\n",

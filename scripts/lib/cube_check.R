@@ -35,6 +35,11 @@ CHK_TAXON_COLS <- c("kingdom", "kingdomkey", "phylum", "phylumkey", "class", "cl
 # columns are not kept meaningfully when rows are merged, so they are left out.
 CHK_HARMONISED_COLS <- c(CHK_TAXON_COLS, "year", "mgrscellcode", "occurrences",
                          "mintemporaluncertainty", "mincoordinateuncertaintyinmeters")
+# Occurrences of the row's kingdom, phylum, ... genus in the cell and year. They
+# are not used by the screen or the indicators, and in the older site cubes
+# they are lower than in the continental cubes; rows that differ only in these
+# columns are counted separately (count_cols_differ), not as differing rows.
+CHK_COUNT_COLS <- c("kingdomcount", "phylumcount", "classcount", "ordercount", "familycount", "genuscount")
 # 100 m MGRS cell: zone, latitude band (C-X without I and O), 100 km square
 # letters (without I and O), 3 + 3 digits.
 CHK_MGRS_100M <- "^[0-9]{1,2}[C-HJ-NP-X][A-HJ-NP-Z]{2}[0-9]{6}$"
@@ -345,14 +350,23 @@ chk_group_of <- function(dt, subsets) {
 #' Compare one site cube with its reference rows.
 #' `cube`, `ref`: normalised text tables with `cols`. `outline`: the site's
 #' outline (sf), used to say whether extra cells lie inside the site.
+#' Rows are matched on all `cols` except the higher-taxon count columns
+#' (CHK_COUNT_COLS); count_cols_differ is the number of matched rows whose
+#' count columns differ.
 #' Returns counts and up to `n_examples` differing rows of each kind.
 chk_compare_site <- function(cube, ref, cols, outline, from_year, n_examples = 20) {
-  kc <- do.call(paste, c(as.list(cube[, cols, with = FALSE]), sep = CHK_SEP))
-  kr <- do.call(paste, c(as.list(ref[, cols, with = FALSE]), sep = CHK_SEP))
-  tc <- data.table::data.table(k = kc)[, .(n_cube = .N, i_cube = .I[1]), by = k]
-  tr <- data.table::data.table(k = kr)[, .(n_ref = .N, i_ref = .I[1]), by = k]
-  m <- merge(tc, tr, by = "k", all = TRUE)
-  m[is.na(n_cube), n_cube := 0L]; m[is.na(n_ref), n_ref := 0L]
+  key_match <- function(cc) {
+    kc <- do.call(paste, c(as.list(cube[, cc, with = FALSE]), sep = CHK_SEP))
+    kr <- do.call(paste, c(as.list(ref[, cc, with = FALSE]), sep = CHK_SEP))
+    tc <- data.table::data.table(k = kc)[, .(n_cube = .N, i_cube = .I[1]), by = k]
+    tr <- data.table::data.table(k = kr)[, .(n_ref = .N, i_ref = .I[1]), by = k]
+    m <- merge(tc, tr, by = "k", all = TRUE)
+    m[is.na(n_cube), n_cube := 0L]; m[is.na(n_ref), n_ref := 0L]
+    m
+  }
+  core <- setdiff(cols, CHK_COUNT_COLS)
+  m <- key_match(core)
+  same_all <- if (length(core) < length(cols)) { ma <- key_match(cols); sum(pmin(ma$n_cube, ma$n_ref)) } else sum(pmin(m$n_cube, m$n_ref))
   m[, `:=`(extra = pmax(n_cube - n_ref, 0L), missing = pmax(n_ref - n_cube, 0L))]
   ex <- m[extra > 0]; mi <- m[missing > 0]
   ex_rows <- cube[ex$i_cube]; mi_rows <- ref[mi$i_ref]
@@ -365,6 +379,7 @@ chk_compare_site <- function(cube, ref, cols, outline, from_year, n_examples = 2
   y_ex <- suppressWarnings(as.numeric(ex_rows$year))
   list(counts = data.table::data.table(
          rows_cube = nrow(cube), rows_ref = nrow(ref), rows_same = sum(pmin(m$n_cube, m$n_ref)),
+         count_cols_differ = sum(pmin(m$n_cube, m$n_ref)) - same_all,
          extra_outside_site = sum(ex$extra[!inside]), extra_inside_site = sum(ex$extra[inside]),
          missing_before = sum(mi$missing[!is.na(y_mi) & y_mi < from_year]),
          missing_from = sum(mi$missing[is.na(y_mi) | y_mi >= from_year]),

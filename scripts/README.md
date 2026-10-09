@@ -141,7 +141,7 @@ Two scripts repair this; both copy every file they change to a backup folder fir
    Rscript scripts/patch_site_cubes_update.R --install-from _local_data/cube_patch_all
    ```
    The install step copies each original to the backup folder, verifies the copies, and writes
-   `install_log.csv` in the work folder.
+   `install_log_<date>_<time>.csv` in the work folder.
    For cubes that already had the update, the summary reports whether the rows rebuilt from the
    main update are identical apart from reptiles, and how many rows came from the other files.
 2. `harmonise_cube_taxonomy.R` gives the older rows (old backbone, numeric keys) the names and keys
@@ -186,4 +186,24 @@ after the patch and again after the taxonomy harmonisation, when the reference i
 name table before comparing). Output goes to `_local_data/cube_check/`; `REPORT_<tag>.md` explains
 each check and ends with a verdict. Functions: `lib/cube_check.R`, `lib/cube_check_report.R`; tests
 (with a made-up world containing known errors): `tests/test_check_cubes.R`.
+Rows that match their source row on every column except the higher-taxon counts (kingdomcount to
+genuscount) are counted separately, not as differences: the screen and the indicators do not use
+these columns.
+
+The check of October 2026 found cubes whose rows before 2024 are incomplete (cubes split on 16-17
+June 2026 that stopped reading early or used another continent's cube, sites whose outlines are
+invalid in planar geometry, rows filed under a neighbouring continent). `rebuild_site_cubes_from_reference.R`
+replaces the rows before 2024 of these cubes with the rows the reference step collected, keeps the
+rows from 2024 on, and writes new cubes for sites with data but no cube. The rebuilt cubes go to a
+separate folder and are put into place with the patch script's install step; the check is then run
+again. For the rebuilt sites the check is no longer independent of the build, since both use the
+reference rows.
+```
+Rscript scripts/rebuild_site_cubes_from_reference.R --out-dir _local_data/cube_rebuild --cores 6
+Rscript scripts/patch_site_cubes_update.R --install-from _local_data/cube_rebuild \
+  --backup-dir _local_data/cube_backup_before_rebuild --work-dir _local_data/cube_rebuild_work
+Rscript scripts/check_site_cubes.R --step compare --tag after_rebuild --update <main>,<fish> --update-groups all,fish --to-year 2025
+Rscript scripts/check_site_cubes.R --step report --tag after_rebuild
+```
+Functions: `lib/cube_rebuild.R`.
 

@@ -97,6 +97,11 @@ chk_write_report <- function(out, tag, from_year) {
       identical, "identical to the sources",
       default = "differs from the sources")]
     add(tab(st[, .(sites = .N, rows_in_cubes = sum(rows_cube), rows_in_sources = sum(rows_ref)), by = status][order(-sites)]), "")
+    if (!"count_cols_differ" %in% names(st)) st[, count_cols_differ := 0]
+    st[is.na(count_cols_differ), count_cols_differ := 0]
+    if (sum(st$count_cols_differ) > 0)
+      add(sprintf("Rows are compared on every column except the higher-taxon counts (kingdomcount to genuscount): %s rows at %s sites match their source row apart from these counts. The screen and the indicators do not use them, so these rows are not counted as differences (column `count_cols_differ` in `sites.csv`).",
+                  fmt(sum(st$count_cols_differ)), fmt(sum(st$count_cols_differ > 0))), "")
     d <- st[status == "differs from the sources"]
     if (nrow(d)) {
       tot <- d[, lapply(.SD, sum), .SDcols = c("missing_before", "missing_from", "extra_inside_site", "extra_outside_site")]
