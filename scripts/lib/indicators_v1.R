@@ -104,3 +104,65 @@ hill_indicators <- function(df, grid = c("100m", "1km"), level = 0.95, q = c(0, 
   out$qD.UCL[out$ci_status != "ok"] <- NA_real_
   out[order(out$year, out$q), c("year", "q", "qD", "qD.LCL", "qD.UCL", "t", "T", "t_over_T", "method", "SC", "ci_status")]
 }
+
+# ---------------------------------------------------------------------------
+# Splitting interval runs (run_indicators.R --split-hours)
+# ---------------------------------------------------------------------------
+
+#' Jobs for an interval run split by year: each site x subset combination is
+#' divided into k parts, part i holding the years whose remainder divided by k
+#' is i (so that early and recent years are spread over the parts). k is chosen
+#' so that a part takes about `hours`, from the seconds the combination took in
+#' an earlier run (`prior`, a hill_ci file; times `growth` for added data), or
+#' `default_k` for combinations without an earlier time. With `size` (the
+#' screen's n_rows, n_cells and S_obs per site and subset), the time of those
+#' combinations is predicted instead, from a log-linear fit of the earlier times
+#' on these sizes (times 1.5, to be on the safe side). Jobs are ordered by
+#' their expected time, longest first. The parts together give exactly the
+#' results of one run, because every year and order has its own seed.
+ci_job_plan <- function(combos, prior = NULL, hours = 0.5, default_k = 8L, max_k = 40L, growth = 1.3, size = NULL) {
+  cb <- unique(data.table::as.data.table(combos)[, .(site_id, subset)])
+  est <- data.table::data.table(site_id = character(), subset = character(), est_hours = numeric())
+  if (!is.null(prior) && nrow(prior)) {
+    p <- unique(data.table::as.data.table(prior)[, .(site_id, subset, grid, level, seconds)], by = c("site_id", "subset", "grid", "level"))
+    est <- p[, .(est_hours = growth * sum(seconds) / 3600), by = .(site_id, subset)]
+  }
+  cb <- merge(cb, est, by = c("site_id", "subset"), all.x = TRUE, sort = FALSE)
+  cb[, predicted := FALSE]
+  if (!is.null(size) && all(c("n_rows", "n_cells", "S_obs") %in% names(size)) && any(is.na(cb$est_hours))) {
+    sz <- unique(data.table::as.data.table(size)[n_rows > 0 & n_cells > 0 & S_obs > 0, .(site_id, subset, n_rows, n_cells, S_obs)],
+                 by = c("site_id", "subset"))
+    known <- merge(est, sz, by = c("site_id", "subset"))
+    if (nrow(known) >= 10) {
+      fit <- stats::lm(log(est_hours) ~ log(n_rows) + log(n_cells) + log(S_obs), data = known)
+      un <- merge(cb[is.na(est_hours), .(site_id, subset)], sz, by = c("site_id", "subset"))
+      if (nrow(un)) {
+        un[, pred := 1.5 * exp(stats::predict(fit, newdata = un))]
+        i <- match(paste(un$site_id, un$subset), paste(cb$site_id, cb$subset))
+        cb[i, `:=`(est_hours = un$pred, predicted = TRUE)]
+      }
+    }
+  }
+  cb[, k := as.integer(ifelse(is.na(est_hours), default_k, pmin(max_k, pmax(1, ceiling(est_hours / hours)))))]
+  jobs <- cb[, .(part = seq_len(k) - 1L), by = .(site_id, subset, k, est_hours, predicted)]
+  jobs[, years := sprintf("m%dr%d", k, part)]
+  jobs[, est_part_hours := ifelse(is.na(est_hours), hours, est_hours / k)]
+  jobs[order(-est_part_hours, site_id, subset, part)]
+}
+
+#' Merge the parts of a split interval run for one site into the table one
+#' unsplit run would have written: rows ordered by subset (in `subset_order`),
+#' grid, level, year and q; `seconds` is the sum over the parts.
+merge_ci_parts <- function(files, subset_order) {
+  x <- data.table::rbindlist(lapply(seq_along(files), function(i) {
+    d <- data.table::fread(files[i])
+    if (nrow(d) && "subset" %in% names(d)) d[, .part := i] else NULL
+  }), fill = TRUE)
+  if (!nrow(x)) return(data.table::data.table(site_id = character()))
+  tot <- unique(x[, .(subset, grid, level, .part, seconds)], by = c("subset", "grid", "level", ".part"))[
+    , .(total = sum(seconds)), by = .(subset, grid, level)]
+  x <- merge(x, tot, by = c("subset", "grid", "level"), sort = FALSE)
+  x[, `:=`(seconds = total, total = NULL, .part = NULL)]
+  data.table::setcolorder(x, c("site_id", "subset", "grid", "level", "nboot", "seconds"))
+  x[order(match(subset, subset_order), grid, level, year, q)]
+}

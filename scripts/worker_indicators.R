@@ -10,7 +10,11 @@
 #     nboot    bootstrap replicates (mode "ci")
 #     grids    optional, comma-separated grids (default "100m,1km")
 #     years    optional, mode "ci" only: first and last year ("2024-2025"); only these
-#              years get Hill numbers and intervals, to add years to an earlier run
+#              years get Hill numbers and intervals, to add years to an earlier run;
+#              or "m<K>r<i>" (e.g. "m8r3"): the years whose remainder divided by K is i,
+#              for splitting one combination over several processes (run_indicators.R
+#              --split-hours). Each year and order has its own random seed, so the parts
+#              together give exactly the results of one run over all years.
 #
 # Indicators (scripts/lib/indicators_v1.R): total occurrences, observed and
 # cumulative richness, occupied cells and sample coverage, and Hill numbers
@@ -46,8 +50,12 @@ YEARS_ARG <- if (length(args) == 8) args[8] else ""
 YEARS <- NULL
 if (nzchar(YEARS_ARG)) {
   if (mode != "ci") stop("years can only be given in mode \"ci\" (cumulative richness and MAGV need all years)")
-  yy <- as.numeric(strsplit(YEARS_ARG, "-")[[1]])
-  YEARS <- seq(yy[1], yy[length(yy)])
+  if (grepl("^m[0-9]+r[0-9]+$", YEARS_ARG)) {
+    YEARS_MOD <- as.numeric(strsplit(sub("^m", "", YEARS_ARG), "r")[[1]])   # K, i: chosen below from the cube's years
+  } else {
+    yy <- as.numeric(strsplit(YEARS_ARG, "-")[[1]])
+    YEARS <- seq(yy[1], yy[length(yy)])
+  }
 }
 stopifnot(all(GRIDS %in% c("100m", "1km")))
 LEVELS <- c(0.90, 0.95)
@@ -57,6 +65,10 @@ df_all <- as.data.frame(fread(cube_path, select = cols, showProgress = FALSE,
   colClasses = list(character = c("kingdom", "phylum", "class", "order", "species", "specieskey", "mgrscellcode"),
                     numeric = c("year", "occurrences"))))
 df_all <- filter_years(df_all)
+if (exists("YEARS_MOD")) {
+  yr <- sort(unique(df_all$year))
+  YEARS <- yr[yr %% YEARS_MOD[1] == YEARS_MOD[2]]
+}
 
 simple <- hill <- magv <- list()
 for (sub in subsets) {
