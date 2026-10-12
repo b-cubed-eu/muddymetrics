@@ -272,6 +272,26 @@ test_that("precision ratio: occurrence-weighted mean of areas, missing share", {
   expect_true(is.na(precision_ratio(df[3, ], 2)$ratio_median))
 })
 
+test_that("vague records: uncertainty circle larger than VAGUE_RATIO x site area", {
+  expect_equal(VAGUE_RATIO, 0.10)
+  # site 2 km2: limit 0.2 km2 -> radius sqrt(0.2 / pi) = 252.3 m
+  df <- data.frame(mincoordinateuncertaintyinmeters = c(100, 252, 253, 1000, NA),
+                   occurrences = c(1, 2, 3, 4, 10))
+  expect_equal(vague_rows(df, 2), c(FALSE, FALSE, TRUE, TRUE, FALSE))
+  v <- vague_share(df, 2)
+  expect_equal(v$rows, 2 / 4)                  # rows without a value are left out
+  expect_equal(v$occ, (3 + 4) / (1 + 2 + 3 + 4))
+  # max_ratio 1: limit 2 km2 -> radius 797.9 m
+  expect_equal(vague_rows(df, 2, max_ratio = 1), c(FALSE, FALSE, FALSE, TRUE, FALSE))
+})
+
+test_that("vague records: no site area or no uncertainty values", {
+  df <- data.frame(mincoordinateuncertaintyinmeters = c(1e5, NA), occurrences = c(1, 1))
+  expect_equal(vague_rows(df, NA), c(FALSE, FALSE))
+  expect_true(is.na(vague_share(df, NA)$occ))
+  expect_true(is.na(vague_share(df[2, ], 2)$rows))
+})
+
 test_that("weighted median", {
   expect_equal(weighted_median(c(3, 1, 2), c(1, 1, 1)), 2)
   expect_equal(weighted_median(c(1, 2, 3, 4), c(1, 1, 1, 1)), 2)   # lower median

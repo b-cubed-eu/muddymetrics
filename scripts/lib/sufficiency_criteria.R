@@ -43,6 +43,7 @@ TAXON_COL <- "species"
 MIN_ROWS <- 10      # subsets with fewer cube rows are not evaluated
 MIN_YEARS <- 3      # minimum years for the temporal criterion
 FIRST_YEAR <- 1990
+VAGUE_RATIO <- 0.10   # a record is vague if its uncertainty circle exceeds this share of the site area
 
 # An informative year (coverage rule "informative"): at least this many occupied
 # cells and species x cell incidences. In subsamples of well-sampled 1 km site-years,
@@ -324,6 +325,25 @@ precision_ratio <- function(df, area_km2) {
   median_area <- pi * (weighted_median(u[has], w[has]) / 1000)^2
   list(ratio = mean_area / area_km2, mean_area_km2 = mean_area, frac_occ_missing = frac_missing,
        ratio_median = median_area / area_km2, median_area_km2 = median_area)
+}
+
+#' Rows whose uncertainty circle (pi r^2, from mincoordinateuncertaintyinmeters)
+#' is larger than `max_ratio` times the site area: records too vague to place
+#' within the site (the same ratio as the precision criterion, applied to single
+#' records). Rows without an uncertainty value are not counted as vague.
+vague_rows <- function(df, area_km2, max_ratio = VAGUE_RATIO) {
+  u <- suppressWarnings(as.numeric(df$mincoordinateuncertaintyinmeters))
+  if (is.na(area_km2) || area_km2 <= 0) return(rep(FALSE, nrow(df)))
+  !is.na(u) & pi * (u / 1000)^2 > max_ratio * area_km2
+}
+
+#' Share of the rows and of the occurrences of a subset that are vague, among
+#' those with an uncertainty value.
+vague_share <- function(df, area_km2, max_ratio = VAGUE_RATIO) {
+  u <- suppressWarnings(as.numeric(df$mincoordinateuncertaintyinmeters))
+  has <- !is.na(u); v <- vague_rows(df, area_km2, max_ratio); w <- df$occurrences
+  if (!any(has) || is.na(area_km2) || area_km2 <= 0) return(list(rows = NA_real_, occ = NA_real_))
+  list(rows = sum(v) / sum(has), occ = sum(w[v], na.rm = TRUE) / sum(w[has], na.rm = TRUE))
 }
 
 #' Lower weighted median: the smallest x at which the cumulative weight

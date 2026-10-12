@@ -12,6 +12,8 @@
 #   Rscript scripts/run_sufficiency.R --last-year 2023     # leave out records after 2023
 #   Rscript scripts/run_sufficiency.R --subsets aves,full  # other taxon subsets (default: SUBSETS
 #                                    # in lib/sufficiency_criteria.R, without "full")
+#   Rscript scripts/run_sufficiency.R --drop-vague      # leave out records whose uncertainty circle is
+#                                    # larger than VAGUE_RATIO (0.1) times the site area (sensitivity check)
 #
 # Resumable: sites that already have a result file are skipped. Each site is
 # run in its own R process, so one failing site cannot stop the run; failures
@@ -30,6 +32,8 @@ grid <- match.arg(arg("--grid", "100m"), c("100m", "1km"))
 OUT_DIR <- arg("--out", if (grid == "100m") "output/sufficiency_v1" else "output/sufficiency_v1_1km")
 last_year <- arg("--last-year", "Inf")
 subsets <- arg("--subsets", paste(SUBSETS, collapse = ","))
+drop_vague <- if ("--drop-vague" %in% commandArgs(trailingOnly = TRUE)) "yes" else "none"
+if (drop_vague == "yes") cat("Records with an uncertainty circle larger than", VAGUE_RATIO, "x the site area are left out.\n")
 stopifnot(all(strsplit(subsets, ",")[[1]] %in% ALL_SUBSETS))
 
 # Site discovery (scripts/lib/sufficiency_criteria.R), identical to
@@ -54,16 +58,16 @@ cat(sprintf("%d already done, %d to run on %d cores.\n", nrow(sites) - nrow(todo
 
 if (nrow(todo) > 0) {
   cl <- makePSOCKcluster(n_cores)
-  status <- parLapply(cl, seq_len(nrow(todo)), function(i, todo, log_dir, grid, last_year, subsets) {
+  status <- parLapply(cl, seq_len(nrow(todo)), function(i, todo, log_dir, grid, last_year, subsets, drop_vague) {
     s <- todo[i, ]
     log <- file.path(log_dir, paste0(s$site_id, ".log"))
     code <- system2("Rscript", c("scripts/worker_sufficiency.R", shQuote(s$cont), shQuote(s$country),
-                                 shQuote(s$site_id), shQuote(s$file_path), shQuote(s$out_file), grid, last_year, subsets),
+                                 shQuote(s$site_id), shQuote(s$file_path), shQuote(s$out_file), grid, last_year, subsets, drop_vague),
                     stdout = log, stderr = log)
     ok <- code == 0 && file.exists(s$out_file)
     if (ok) unlink(log)   # keep logs only for failures
     data.frame(site_id = s$site_id, ok = ok, exit_code = code)
-  }, todo = todo, log_dir = log_dir, grid = grid, last_year = last_year, subsets = subsets)
+  }, todo = todo, log_dir = log_dir, grid = grid, last_year = last_year, subsets = subsets, drop_vague = drop_vague)
   stopCluster(cl)
   status <- bind_rows(status)
   failed <- status[!status$ok, ]

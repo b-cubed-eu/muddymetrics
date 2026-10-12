@@ -50,6 +50,11 @@ The taxon subsets are birds, mammals, herpetofauna, insects, plants and fish. Al
     Rscript scripts/check_sufficiency_against_d61.R        # optional comparison with the D6.1 results
     Rscript -e 'testthat::test_file("scripts/tests/test_sufficiency_criteria.R")'
 
+Every run also reports, per site x taxon, the share of rows and of occurrences whose uncertainty circle is
+larger than 0.1 x the site area (`share_rows_vague`, `share_occ_vague`; among rows with an uncertainty value).
+`--drop-vague` leaves those records out before any criterion is computed (sensitivity check for the precision
+criterion; use its own `--out` folder).
+
 The runner is resumable and runs each site in its own R process. All criterion functions are in
 `scripts/lib/sufficiency_criteria.R`. Requires data.table, dplyr, sf, iNEXT and testthat.
 

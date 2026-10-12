@@ -4,7 +4,7 @@
 # see apply_sufficiency_thresholds.R.
 #
 # Usage (from the repository root):
-#   Rscript scripts/worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid] [last_year] [subsets]
+#   Rscript scripts/worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid] [last_year] [subsets] [drop_vague]
 #
 # grid is "100m" (default, the cube's native cells) or "1km". Only the
 # criteria that use grid cells as sampling units change with the grid: Chao2
@@ -12,13 +12,18 @@
 # do not depend on it. last_year (default: none, "Inf") drops records after that year.
 # subsets is a comma-separated list (default: SUBSETS in lib/sufficiency_criteria.R;
 # "full" is also accepted).
+# drop_vague ("none", default, or "yes") leaves out, before any criterion is
+# computed, the records whose uncertainty circle is larger than VAGUE_RATIO times
+# the site area (vague_rows() in lib/sufficiency_criteria.R). The shares of such
+# records (share_rows_vague, share_occ_vague, among rows with an uncertainty
+# value) are reported in every run, before anything is dropped.
 #
 # The cube path is passed explicitly by the runner, so the worker never looks
 # files up by name.
 
 args <- commandArgs(trailingOnly = TRUE)
-if (!length(args) %in% 5:8) {
-  cat("Usage: worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid] [last_year] [subsets]\n")
+if (!length(args) %in% 5:9) {
+  cat("Usage: worker_sufficiency.R <continent> <country> <site_id> <cube_path> <out_file> [grid] [last_year] [subsets] [drop_vague]\n")
   quit(status = 1)
 }
 cont <- args[1]; country <- args[2]; site_id <- args[3]
@@ -31,8 +36,10 @@ suppressPackageStartupMessages({
   library(sf)
 })
 source("scripts/lib/sufficiency_criteria.R")
-subsets <- if (length(args) == 8) strsplit(args[8], ",")[[1]] else SUBSETS
+subsets <- if (length(args) >= 8) strsplit(args[8], ",")[[1]] else SUBSETS
 stopifnot(all(subsets %in% ALL_SUBSETS))
+drop_vague <- if (length(args) == 9) args[9] else "none"
+stopifnot(drop_vague %in% c("none", "yes"))
 
 WKT_ROOT <- "inst/extdata/ramsar_sites_wkt"
 t0 <- Sys.time()
@@ -54,10 +61,15 @@ prec_d61 <- precision_ratio_d61(df_all, area)
 
 rows <- lapply(subsets, function(subset) {
   sub <- subset_taxon(df, subset)
+  vs <- vague_share(sub, area)
+  n_vague <- sum(vague_rows(sub, area))
+  if (drop_vague == "yes") sub <- sub[!vague_rows(sub, area), , drop = FALSE]
   base <- list(continent = cont, country = country, site_id = site_id, subset = subset, grid = grid,
                n_rows = nrow(sub), n_occurrences = sum(sub$occurrences, na.rm = TRUE),
                site_area_km2 = area, n_wkt_matches = length(wkt_files),
-               precision_ratio_d61 = prec_d61)
+               precision_ratio_d61 = prec_d61,
+               share_rows_vague = vs$rows, share_occ_vague = vs$occ,
+               n_rows_vague_dropped = if (drop_vague == "yes") n_vague else 0L)
   if (nrow(sub) < MIN_ROWS) return(c(base, status = "too_few_rows"))
 
   st <- incidence_stats(sub)
